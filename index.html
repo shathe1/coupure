@@ -1,0 +1,1349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>COUPURE — Every Cut Has a Consequence</title>
+<meta name="description" content="A heatwave grid-management game: keep a Tunisian city's power and water running through five days of extreme heat.">
+<meta name="theme-color" content="#0b1014">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* COUPURE — a night-shift electricity dispatch room. Single dark theme by design. */
+:root{
+  --night:#0b1014; --panel:#121a20; --panel2:#17212a; --line:#24323c; --line2:#31434f;
+  --ink:#e9eee7; --dim:#8c9ca4; --mute:#5f6f78;
+  --amber:#ffb547; --amber-d:#6b5a3c; --water:#45c2d6; --heat:#ff5d4a; --ok:#7fd18b;
+  --f-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--night);color:var(--ink)}
+body{font-family:var(--f-body);font-size:14px;line-height:1.45;
+  background-image:
+    radial-gradient(900px 380px at 50% -120px,rgba(255,181,71,.07),transparent 70%),
+    linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:auto,44px 44px,44px 44px;background-attachment:fixed}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+a{color:var(--water)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+svg.ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- App shell ---------- */
+.app{max-width:1500px;margin:0 auto;padding:10px max(14px,env(safe-area-inset-right,0px)) 18px max(14px,env(safe-area-inset-left,0px));display:grid;gap:10px;position:relative}
+.hud{display:flex;flex-wrap:wrap;align-items:center;gap:8px 22px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;position:relative;overflow:hidden}
+.hud .brand{display:flex;align-items:baseline;gap:8px;margin-right:auto}
+.hud .brand b{font-family:var(--f-display);font-weight:900;font-size:28px;letter-spacing:.04em;color:var(--amber);line-height:1}
+.hud .brand span{color:var(--dim);font-size:13px}
+.stat{display:grid;gap:0;min-width:56px}
+.stat .k{font-size:10px;text-transform:uppercase;letter-spacing:.13em;color:var(--dim)}
+.stat .v{font-family:var(--f-display);font-weight:800;font-size:26px;line-height:1.05;white-space:nowrap}
+.stat .v small{font-family:var(--f-mono);font-size:11px;color:var(--dim);font-weight:400;margin-left:3px}
+.stat .v.hot{color:var(--heat)}
+.stat.trust{min-width:120px}
+.stat.trust .meter{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:2px}
+.stat.trust .meter i{display:block;height:100%;background:var(--ok);transition:width .3s,background .3s}
+.stat.trust.low .meter i{background:var(--heat)} .stat.trust.low .v{color:var(--heat)}
+.stat.trust.mid .meter i{background:var(--amber)}
+.flash-down{animation:flashDown .7s ease}
+.flash-up{animation:flashUp .7s ease}
+@keyframes flashDown{0%{color:var(--heat);transform:scale(1.12)}100%{transform:scale(1)}}
+@keyframes flashUp{0%{color:var(--ok)}100%{}}
+.hud-btns{display:flex;gap:6px}
+.ibtn{width:36px;height:36px;border:1px solid var(--line2);border-radius:6px;display:grid;place-items:center;color:var(--ink);background:var(--panel2);transition:border-color .15s,background .15s}
+.ibtn:hover:not(:disabled){border-color:var(--amber)}
+.ibtn:disabled{opacity:.4}
+.ibtn svg{width:17px;height:17px}
+.dayprog{position:absolute;left:0;bottom:0;height:2px;background:var(--amber);width:0;transition:width .12s linear;opacity:.8}
+
+.deck{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:10px;align-items:start}
+.col-main{display:grid;gap:10px;min-width:0}
+.col-side{display:grid;gap:10px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.ph h2{margin:0;font-family:var(--f-display);font-weight:800;font-size:19px;letter-spacing:.07em;text-transform:uppercase}
+.ph p{margin:0;color:var(--dim);font-size:12.5px}
+
+/* ---------- Grid load ---------- */
+.gridpanel{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:6px 18px;transition:border-color .2s,box-shadow .2s}
+.gridpanel.warn{border-color:rgba(255,181,71,.65)}
+.gridpanel.bad{border-color:var(--heat);box-shadow:0 0 0 1px rgba(255,93,74,.35),0 0 26px rgba(255,93,74,.12)}
+.gridpanel .ph{grid-column:1/-1;margin-bottom:2px}
+.verdict{font-family:var(--f-mono);font-size:12px;font-weight:600;padding:3px 9px;border-radius:4px;border:1px solid currentColor;letter-spacing:.04em;white-space:nowrap}
+.verdict.ok{color:var(--ok)} .verdict.warn{color:var(--amber)} .verdict.bad{color:var(--heat);background:rgba(255,93,74,.1)}
+.bar{position:relative;height:30px;background:#0d1419;border:1px solid var(--line);border-radius:4px;margin-top:4px}
+.bar .seg{position:absolute;top:0;bottom:0;transition:width .25s ease,left .25s ease}
+.seg.gas{background:var(--amber-d)} .seg.imp{background:#8a5a3c}
+.seg.sun{background:var(--amber)}
+.seg.bat{background:repeating-linear-gradient(135deg,var(--ok) 0 5px,#5fa368 5px 10px)}
+.bar .dem{position:absolute;top:-5px;bottom:-5px;width:3px;background:var(--ink);box-shadow:0 0 0 2px var(--night);transition:left .25s ease;border-radius:2px}
+.bar .dem::after{content:"DEMAND";position:absolute;top:-13px;left:50%;transform:translateX(-50%);font:600 9px var(--f-mono);letter-spacing:.08em;color:var(--ink);white-space:nowrap}
+.gridpanel.bad .bar .dem{background:var(--heat)} .gridpanel.bad .bar .dem::after{color:var(--heat)}
+.legend{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:11.5px;color:var(--dim);margin-top:6px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.readings{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:8px}
+.rd{border-top:1px solid var(--line);padding-top:5px;min-width:0}
+.rd .k{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd .v{font-family:var(--f-mono);font-size:16px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rd .v.pos{color:var(--ok)} .rd .v.neg{color:var(--heat)} .rd .v.tight{color:var(--amber)}
+.chart{display:grid;gap:3px;align-content:start}
+.chart svg{width:100%;height:auto;display:block;background:#0d1419;border:1px solid var(--line);border-radius:4px}
+.chart .cap{display:flex;justify-content:space-between;font:10px var(--f-mono);color:var(--mute)}
+.chart .ttl{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--dim)}
+.alert{grid-column:1/-1;font-size:13px;font-weight:500;border-radius:4px;padding:5px 10px;border-left:3px solid var(--line2);background:#0d1419;color:var(--dim);min-height:30px;display:flex;align-items:center;gap:8px;margin-top:6px}
+.alert.warn{border-color:var(--amber);color:var(--amber)}
+.alert.bad{border-color:var(--heat);color:#ffb3a8;background:rgba(255,93,74,.09)}
+.alert.good{border-color:var(--ok);color:var(--ok)}
+.alert.pop{animation:pop .35s ease}
+@keyframes pop{0%{transform:translateY(-3px);opacity:.3}100%{transform:none;opacity:1}}
+
+/* ---------- City board ---------- */
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tile{position:relative;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 11px 9px;display:flex;flex-direction:column;gap:3px;min-height:150px;transition:border-color .2s,background .3s,opacity .3s,transform .08s;overflow:hidden}
+.tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--line2);transition:background .3s}
+.tile.crit::before{background:var(--amber)}
+.tile.t-pump::before{background:var(--water)}
+.tile:hover:not(:disabled){border-color:var(--dim)}
+.tile:active:not(:disabled){transform:scale(.985)}
+.tile:disabled{cursor:default}
+.t-top{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.11em;padding-right:16px}
+.t-top .crit-l{color:var(--amber);font-weight:600}
+.lamp{position:absolute;top:11px;right:11px;width:10px;height:10px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px 2px rgba(255,181,71,.55);transition:background .35s,box-shadow .35s}
+.t-name{font-family:var(--f-display);font-weight:800;font-size:21px;line-height:1.05;letter-spacing:.01em}
+.t-ar{font-size:12.5px;color:var(--dim);line-height:1.3}
+.t-water{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--water);margin-top:3px;min-height:17px}
+.t-water.dry{color:var(--heat);font-weight:600}
+.t-water.none{color:var(--mute)}
+.t-water.safe{color:var(--ok)}
+.tank{flex:1;max-width:90px;height:7px;border:1px solid currentColor;border-radius:2px;overflow:hidden}
+.tank i{display:block;height:100%;background:currentColor;transition:width .2s linear}
+.t-meta{font-size:11px;color:var(--dim);min-height:16px}
+.t-meta b{font-weight:600;color:var(--ink)}
+.t-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:auto;padding-top:4px}
+.t-mw{font-family:var(--f-mono);font-size:12.5px;color:var(--ink)}
+.pill{font:600 10.5px var(--f-mono);letter-spacing:.05em;padding:2px 7px;border-radius:3px;border:1px solid currentColor;white-space:nowrap;color:var(--amber)}
+.t-key{position:absolute;right:9px;bottom:34px;font:10px var(--f-mono);color:var(--mute);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+.tile.is-cut{background:repeating-linear-gradient(135deg,#0f161b 0 10px,#12191e 10px 20px)}
+.tile.is-cut .lamp{background:var(--line2);box-shadow:none}
+.tile.is-cut .t-name{color:var(--dim)}
+.tile.is-cut .pill{color:var(--dim)}
+.tile.is-cut .t-mw{color:var(--dim)}
+.tile.is-black{border-color:rgba(255,93,74,.6);background:#150f10}
+.tile.is-black .lamp{background:var(--heat);box-shadow:0 0 10px 2px rgba(255,93,74,.5);animation:blink 1s steps(2) infinite}
+.tile.is-black .pill{color:var(--heat)}
+.tile.is-prot::before{background:var(--ok)}
+.tile.is-prot .lamp{background:var(--ok);box-shadow:0 0 10px 2px rgba(127,209,139,.5)}
+.tile.is-prot .pill{color:var(--ok)}
+.tile.is-backup .pill{color:var(--heat)}
+.tile.is-dry{border-color:rgba(255,93,74,.55)}
+.tile.is-lock{cursor:progress}
+.tile.is-lock .pill{opacity:.55}
+.tile.anim-off{animation:powerDown .5s ease}
+.tile.anim-on{animation:powerUp .45s ease}
+@keyframes powerDown{0%{filter:brightness(1.25)}25%{filter:brightness(.6)}45%{filter:brightness(1.1)}100%{filter:none}}
+@keyframes powerUp{0%{filter:brightness(.7)}40%{filter:brightness(1.35)}100%{filter:none}}
+@keyframes blink{50%{opacity:.35}}
+.inspect{font-size:12.5px;color:var(--dim);min-height:19px}
+.inspect b{color:var(--ink);font-weight:600}
+
+/* ---------- Side ---------- */
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.kv:last-child{border:0}
+.kv span:first-child{color:var(--dim)}
+.kv span:last-child{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.log{list-style:none;margin:0;padding:0;display:grid;gap:5px;max-height:330px;overflow-y:auto;font-size:12.5px;align-content:start}
+.log li{border-left:2px solid var(--line2);padding-left:8px;color:var(--dim);animation:pop .3s ease}
+.log li b{font-family:var(--f-mono);font-weight:500;color:var(--mute);margin-right:6px;font-size:11px}
+.log li.warn{border-color:var(--amber);color:#e6cfa3}
+.log li.bad{border-color:var(--heat);color:#ffb3a8}
+.log li.good{border-color:var(--ok);color:#b9dfbf}
+.foot{color:var(--mute);font-size:11.5px;text-align:center;padding-top:2px}
+.foot button{color:var(--dim);text-decoration:underline}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--amber);background:var(--amber);color:#1b1206;font-weight:600;padding:11px 22px;border-radius:5px;letter-spacing:.03em;transition:filter .15s,transform .08s,border-color .15s}
+.btn:hover:not(:disabled){filter:brightness(1.08)} .btn:active:not(:disabled){transform:translateY(1px)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line2)}
+.btn.ghost:hover:not(:disabled){border-color:var(--amber);filter:none}
+.btn.danger{background:transparent;color:var(--heat);border-color:var(--heat)}
+.btn.big{font-family:var(--f-display);font-weight:800;font-size:22px;letter-spacing:.1em;padding:13px 34px}
+.btn:disabled{opacity:.45}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+/* ---------- Overlays ---------- */
+.layer{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;overflow-y:auto;background:rgba(6,10,13,.82);backdrop-filter:blur(3px);animation:fade .3s ease}
+.layer.top{z-index:40}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet{width:min(100%,920px);background:var(--panel);border:1px solid var(--line2);border-top:3px solid var(--amber);border-radius:8px;padding:22px 24px;display:grid;gap:14px;animation:rise .35s ease;margin:auto}
+.sheet.narrow{width:min(100%,560px)}
+.sheet.wide{width:min(100%,1060px)}
+.sheet.bad{border-top-color:var(--heat)}
+.sheet.good{border-top-color:var(--ok)}
+@keyframes rise{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.sheet h2{margin:0;font-family:var(--f-display);font-weight:900;font-size:34px;line-height:1;letter-spacing:.02em;text-wrap:balance}
+.sheet h3{margin:0;font-family:var(--f-display);font-weight:800;font-size:17px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.sheet p{margin:0;max-width:72ch}
+.eyebrow{font:600 11px var(--f-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+.dimtxt{color:var(--dim)}
+.cells{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.cell{border-top:1px solid var(--line2);padding-top:6px}
+.cell .k{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:var(--dim)}
+.cell .v{font-family:var(--f-mono);font-size:21px;font-variant-numeric:tabular-nums}
+.cell .v.neg{color:var(--heat)} .cell .v.pos{color:var(--ok)}
+.cell small{color:var(--dim);font-size:11.5px;display:block}
+.callout{border-left:3px solid var(--amber);background:#0d1419;padding:9px 12px;border-radius:0 4px 4px 0;font-size:13.5px}
+.callout.water{border-color:var(--water)} .callout.bad{border-color:var(--heat)}
+.callout b{color:var(--ink)}
+
+/* Menu */
+#menu{background:var(--night);z-index:30;background-image:radial-gradient(700px 420px at 70% 30%,rgba(255,93,74,.12),transparent 70%),radial-gradient(800px 500px at 20% 90%,rgba(255,181,71,.07),transparent 70%),linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:auto,auto,44px 44px,44px 44px}
+.menu{width:min(100%,980px);display:grid;gap:22px;position:relative;margin:auto;padding:20px 0}
+.menu .ghost-num{position:absolute;right:-10px;top:-30px;font-family:var(--f-display);font-weight:900;font-size:clamp(150px,30vw,340px);line-height:.8;color:transparent;-webkit-text-stroke:1px rgba(255,93,74,.22);pointer-events:none;user-select:none;z-index:0}
+.menu>*{position:relative;z-index:1}
+.menu h1{margin:0;font-family:var(--f-display);font-weight:900;font-size:clamp(72px,15vw,170px);line-height:.82;letter-spacing:.02em;color:var(--amber);text-shadow:0 0 60px rgba(255,181,71,.25)}
+.menu .sub{font-family:var(--f-display);font-weight:600;font-size:clamp(18px,3vw,28px);letter-spacing:.24em;color:var(--ink);margin-top:10px}
+.menu .ar{font-size:22px;color:var(--dim);margin-left:10px;letter-spacing:0}
+.menu .intro{font-size:clamp(16px,2vw,20px);max-width:36ch;line-height:1.5;color:var(--ink)}
+.menu .intro b{color:var(--heat);font-family:var(--f-mono)}
+.menu .meta{display:flex;flex-wrap:wrap;gap:8px 22px;color:var(--dim);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+.menu .meta b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
+.pulse-line{height:2px;background:linear-gradient(90deg,transparent,var(--amber),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:sweep 4s linear infinite;opacity:.6}
+@keyframes sweep{from{background-position:-60% 0}to{background-position:160% 0}}
+
+/* Tutorial */
+.steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;counter-reset:s}
+.step{background:#0d1419;border:1px solid var(--line);border-radius:6px;padding:12px;display:grid;gap:6px;align-content:start;counter-increment:s}
+.step::before{content:counter(s);font-family:var(--f-display);font-weight:900;font-size:30px;line-height:1;color:var(--amber)}
+.step b{font-size:13.5px} .step span{font-size:12.5px;color:var(--dim)}
+.step svg{width:22px;height:22px;color:var(--ink)}
+.step.w svg{color:var(--water)} .step.g svg{color:var(--ok)}
+
+/* Shop */
+.shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:10px}
+.item{position:relative;text-align:left;background:#0d1419;border:1px solid var(--line2);border-radius:6px;padding:12px;display:grid;gap:5px;align-content:start;transition:border-color .15s,transform .1s,opacity .2s}
+.item:hover:not(:disabled){border-color:var(--amber);transform:translateY(-1px)}
+.item:disabled{opacity:.5}
+.item.owned{border-color:rgba(127,209,139,.5)}
+.item.owned:disabled{opacity:.85}
+.item .t{font-weight:600;font-size:14.5px;display:flex;gap:7px;align-items:center}
+.item .c{font-family:var(--f-mono);color:var(--amber);font-size:13px}
+.item .x{font-size:12.5px;color:var(--ink)}
+.item .tr{font-size:12px;color:var(--dim)}
+.item .tr::before{content:"Trade-off · ";color:var(--mute)}
+.item .tagl{font:600 10.5px var(--f-mono);letter-spacing:.05em;margin-top:2px}
+.item .tagl.own{color:var(--ok)} .item .tagl.no{color:var(--heat)} .item .tagl.av{color:var(--amber)}
+.item.bought{animation:bought .6s ease}
+@keyframes bought{0%{box-shadow:0 0 0 0 rgba(127,209,139,.7)}100%{box-shadow:0 0 0 14px rgba(127,209,139,0)}}
+.budgetline{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline}
+.budgetline .big{font-family:var(--f-display);font-weight:900;font-size:40px;line-height:1;color:var(--amber)}
+
+/* Results */
+.res-top{display:grid;grid-template-columns:150px minmax(0,1fr);gap:22px;align-items:center}
+.ring{position:relative;width:150px;height:150px}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:9}
+.ring .bg{stroke:var(--line)} .ring .fg{stroke:var(--amber);stroke-linecap:round;transition:stroke-dashoffset 1.2s ease}
+.ring .n{position:absolute;inset:0;display:grid;place-items:center;text-align:center;font-family:var(--f-display);font-weight:900;font-size:54px;line-height:.9}
+.ring .n small{display:block;font:11px var(--f-mono);color:var(--dim);font-weight:400}
+.cats{display:grid;gap:7px}
+.cat{display:grid;grid-template-columns:minmax(120px,210px) minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:13px}
+.cat .trk{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.cat .trk i{display:block;height:100%;background:var(--amber);border-radius:4px}
+.cat.w .trk i{background:var(--water)} .cat.h .trk i{background:var(--heat)} .cat.g .trk i{background:var(--ok)} .cat.t .trk i{background:var(--ink)}
+.cat .pts{font-family:var(--f-mono);text-align:right;white-space:nowrap}
+.lessons{margin:0;padding-left:18px;display:grid;gap:6px;max-width:80ch;font-size:13.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:12px var(--f-mono);border:1px solid var(--line2);border-radius:20px;padding:2px 10px;color:var(--ink)}
+.small{font-size:12.5px;color:var(--dim)}
+.small a{color:var(--water)}
+
+/* Trip effects — one soft pulse, no strobe */
+.deck.shake{animation:shake .45s ease}
+@keyframes shake{0%,100%{transform:none}20%{transform:translate(-4px,2px)}40%{transform:translate(4px,-2px)}60%{transform:translate(-3px,-1px)}80%{transform:translate(2px,1px)}}
+.tripflash{position:fixed;inset:0;z-index:15;pointer-events:none;background:rgba(255,60,40,.16);opacity:0}
+.tripflash.go{animation:tflash .9s ease-out}
+@keyframes tflash{0%{opacity:1}100%{opacity:0}}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1180px){.deck{grid-template-columns:minmax(0,1fr)}.col-side{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}.log{max-height:170px}}
+@media (max-width:980px){.gridpanel{grid-template-columns:minmax(0,1fr)}.chart{max-width:420px}.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){
+  .board{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .readings{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .col-side{grid-template-columns:minmax(0,1fr)}
+  .hud{gap:6px 14px;padding:8px 10px}.hud .brand span{display:none}.stat .v{font-size:21px}
+  .tile{min-height:138px}.t-name{font-size:18px}.t-key{display:none}
+  .sheet{padding:16px}.sheet h2{font-size:27px}
+  .res-top{grid-template-columns:minmax(0,1fr);justify-items:start}
+  .cat{grid-template-columns:minmax(0,1fr) 84px}.cat .trk{grid-column:1/-1;order:3}
+}
+@media (max-width:560px){
+  .hud{position:sticky;top:0;z-index:10;border-radius:0 0 8px 8px;margin:-10px -4px 0}
+  .chart,.legend{display:none}
+  .readings{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.rd .v{font-size:14px}
+  .steps{grid-template-columns:minmax(0,1fr)}
+  .tile{min-height:0}.t-meta{display:none}
+  .ibtn{width:34px;height:34px}
+}
+@media (min-width:1181px) and (max-height:800px){.tile{min-height:136px}.log{max-height:250px}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="hud" aria-label="Status">
+    <div class="brand"><b>COUPURE</b><span lang="ar" dir="rtl">كوبور</span></div>
+    <div class="stat"><span class="k">Day</span><span class="v" id="hDay">1/5</span></div>
+    <div class="stat"><span class="k">Time</span><span class="v mono" id="hClock" style="font-family:var(--f-display)">12:00</span></div>
+    <div class="stat"><span class="k">Outside</span><span class="v hot" id="hTemp">42°C</span></div>
+    <div class="stat"><span class="k">Shift ends in</span><span class="v" id="hLeft">60<small>s</small></span></div>
+    <div class="stat trust" id="hTrustBox"><span class="k">Public trust</span><span class="v" id="hTrust">100</span><div class="meter"><i id="hTrustBar" style="width:100%"></i></div></div>
+    <div class="stat"><span class="k">Budget</span><span class="v" id="hBudget">30<small>M TND</small></span></div>
+    <div class="hud-btns">
+      <button class="ibtn" id="bPause" aria-label="Pause" title="Pause (Space)"></button>
+      <button class="ibtn" id="bSound" aria-label="Sound on/off" title="Sound on/off"></button>
+      <button class="ibtn" id="bRestart" aria-label="Restart" title="Restart"></button>
+      <button class="ibtn" id="bAbout" aria-label="About and sources" title="About &amp; sources"></button>
+    </div>
+    <div class="dayprog" id="dayProg"></div>
+  </header>
+
+  <main class="deck" id="deck">
+    <section class="col-main">
+      <div class="panel gridpanel" id="gridPanel">
+        <div class="ph"><h2>Grid load</h2><span class="verdict ok" id="verdict" role="status">STABLE</span></div>
+        <div>
+          <div class="bar" aria-hidden="true">
+            <div class="seg gas" id="bGas"></div><div class="seg imp" id="bImp"></div>
+            <div class="seg sun" id="bSun"></div><div class="seg bat" id="bBat"></div>
+            <div class="dem" id="bDem"></div>
+          </div>
+          <div class="legend">
+            <span><i style="background:var(--amber-d)"></i>Gas</span>
+            <span id="lgImp" hidden><i style="background:#8a5a3c"></i>Emergency gas</span>
+            <span><i style="background:var(--amber)"></i>Solar</span>
+            <span id="lgBat" hidden><i style="background:var(--ok)"></i>Battery</span>
+            <span><i style="background:var(--ink);width:3px"></i>Demand from connected districts</span>
+          </div>
+          <div class="readings">
+            <div class="rd"><div class="k">Demand</div><div class="v" id="rDem">0 MW</div></div>
+            <div class="rd"><div class="k">Supply</div><div class="v" id="rSup">0 MW</div></div>
+            <div class="rd"><div class="k">Safety margin</div><div class="v" id="rMar">0 MW</div></div>
+            <div class="rd"><div class="k">In one hour</div><div class="v" id="rNext">—</div></div>
+            <div class="rd"><div class="k">Battery</div><div class="v" id="rBat">None</div></div>
+          </div>
+        </div>
+        <div class="chart" aria-hidden="true">
+          <span class="ttl">Today's forecast · supply vs demand</span>
+          <svg viewBox="0 0 300 92" id="chart"></svg>
+          <div class="cap"><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span><span>24:00</span></div>
+        </div>
+        <div class="alert" id="alert" role="status" aria-live="polite">Control room standing by.</div>
+      </div>
+
+      <div class="panel" style="padding-bottom:14px">
+        <div class="ph"><h2>The city</h2><p class="inspect" id="inspect">Click a district (or press 1–8) to cut or restore its power.</p></div>
+        <div class="board" id="board"></div>
+      </div>
+    </section>
+
+    <aside class="col-side">
+      <div class="panel">
+        <div class="ph"><h2>Shift record</h2></div>
+        <div class="kv"><span>Energy delivered</span><span id="sServed">100%</span></div>
+        <div class="kv"><span>Water access</span><span id="sWater">100%</span></div>
+        <div class="kv"><span>Grid failures</span><span id="sTrips">0</span></div>
+        <div class="kv"><span>Hospital on backup</span><span id="sHosp">0.0 h</span></div>
+        <div class="kv"><span>Economic losses</span><span id="sEcon">0 M</span></div>
+        <div class="kv"><span>Emissions</span><span id="sCo2">0 t CO₂</span></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><h2>Dispatcher log</h2></div>
+        <ul class="log" id="log" aria-live="off"></ul>
+      </div>
+    </aside>
+  </main>
+  <div class="foot">COUPURE is a simplified educational simulation, not a model of any real grid. <button id="bAbout2">About &amp; sources</button></div>
+</div>
+
+<div class="tripflash" id="tripflash"></div>
+<div class="layer" id="menu"></div>
+<div class="layer" id="sheetLayer" hidden></div>
+<div class="layer top" id="modalLayer" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/* =====================================================================
+   1. SIMULATION CORE — pure logic, no DOM. Every function takes the
+      game state S, so the same code drives the UI and headless tests.
+   ===================================================================== */
+const Sim=(function(){
+  const CFG={
+    DAYS:5, DAY_SECONDS:60, STEP_H:0.02,          // 12 simulated hours in 60 s → 5 s per hour
+    TEMPS:[42,44,46,48,49.7],                     // scenario values, not observations
+    HEAT_SLOPE:0.03,                              // +3% cooling demand per °C above 35
+    GAS_BASE:132, SOLAR_BASE:10,                  // MW
+    START_BUDGET:30, DAILY_BUDGET:30,             // million TND
+    EFF_STEP:0.08, EFF_MAX:3,
+    BATT_MWH:20, BATT_MW:10, BATT_EFF:0.9, BATT_START:0.5,
+    EF_GAS:0.45, EF_IMPORT:0.75, EF_DIESEL:0.8,   // t CO2 per MWh
+    GRACE_H:0.6, BLACKOUT_H:1.0, LOCK_H:0.3,      // overload grace, trip duration, breaker lockout
+    DRAIN:1/3, REFILL:1/2, RES_BACK:0.15,         // reservoir: 3 h of supply, 2 h to refill
+    TR_HOME:0.9, TR_WATER:1.5, TR_HOSP:5, TR_HOSP_DRY:3, TR_ECON:0.45, TR_LAC_DRY:0.5,
+    TR_TRIP:8, TR_RECOVER:0.5, TR_CUT_HOME:0.4, TR_CUT_HOSP:2
+  };
+  // Hour-by-hour shape, 12:00 → 24:00 (13 points, linearly interpolated)
+  const HF=[.80,.85,.90,.95,1,1,1,.98,.95,.90,.80,.70,.62];   // demand
+  const SF=[1,.97,.90,.78,.62,.42,.20,0,0,0,0,0,0];           // solar: zero from 19:00
+
+  const DISTRICTS=[
+    {id:'hosp',name:'Regional Hospital',ar:'المستشفى الجهوي',type:'hospital',tag:'Critical care',base:8,pump:'north',ww:1.5,crit:true,
+      desc:'Critical infrastructure. Without grid power it falls back on diesel backup: surgeries are postponed and patient risk rises. Water comes from the North station.'},
+    {id:'north',name:'North Pumping Station',ar:'محطة الضخ الشمالية',type:'pump',tag:'Water',base:7,crit:true,feeds:['medina','menzah','hosp'],
+      desc:'Supplies water to Medina, El Menzah and the Regional Hospital. Without power its reservoir drains in about three hours — then the taps run dry.'},
+    {id:'south',name:'South Pumping Station',ar:'محطة الضخ الجنوبية',type:'pump',tag:'Water',base:7,crit:true,feeds:['ettad','lac'],
+      desc:'Supplies water to Cité Ettadhamen and Les Berges du Lac. Without power its reservoir drains in about three hours — then the taps run dry.'},
+    {id:'medina',name:'Medina',ar:'المدينة العتيقة',type:'home',tag:'Homes · old city',base:16,pump:'north',vuln:1.3,ww:1.3,vl:'High',
+      desc:'Old city housing with many elderly residents and little insulation. Heat exposure during a cut is high.'},
+    {id:'menzah',name:'El Menzah',ar:'المنزه',type:'home',tag:'Homes · AC-heavy suburb',base:24,pump:'north',vuln:0.8,ww:0.8,vl:'Moderate',
+      desc:'Middle-class suburb with heavy air-conditioning use. Households have more means to cope with a cut — but they still suffer.'},
+    {id:'ettad',name:'Cité Ettadhamen',ar:'حي التضامن',type:'home',tag:'Homes · dense, low-income',base:22,pump:'south',vuln:1.6,ww:1.6,vl:'Very high',
+      desc:'Dense, low-income neighbourhood. Few households have generators, water tanks or anywhere cooler to go: the same hour of darkness does more harm here.'},
+    {id:'lac',name:'Les Berges du Lac',ar:'ضفاف البحيرة',type:'commercial',tag:'Hotels & offices',base:24,pump:'south',ww:0.7,econ:1.0,
+      desc:'Business and hotel district. Cutting it spares households but costs jobs, tourism income and tax revenue — your investment budget shrinks.'},
+    {id:'indus',name:'Industrial Zone',ar:'المنطقة الصناعية',type:'industry',tag:'Factories',base:18,econ:1.2,
+      desc:'Factories, including bottled-water plants, with their own water supply. Cutting it halts production and wages, and shrinks your budget.'}
+  ];
+  const BY={}; DISTRICTS.forEach(d=>BY[d.id]=d);
+  const PUMPS=DISTRICTS.filter(d=>d.type==='pump');
+  const SHED_ORDER=['indus','lac','menzah','medina','ettad','north','south','hosp'];
+
+  // Scripted, announced-in-advance conditions. No random events.
+  const DAYINFO=[
+    {title:'First shift',brief:'Demand will pass supply by mid-afternoon. Disconnect a district before the white demand marker crosses the end of the supply bar.'},
+    {title:'The evening peak',brief:'Solar fades from 17:00 and is gone by 19:00 — but air conditioners keep running long after dark.'},
+    {title:'Low reservoirs',brief:'Record water use has left both reservoirs at 60%, and they drain faster today. A pumping station without power now runs dry in under two hours.',resStart:0.6,drain:1.25,evt:'Water authority: reservoirs start at 60% and drain faster.'},
+    {title:'Turbines under strain',brief:'Gas turbines lose output in extreme heat: 6 MW less from 14:00 to 19:00. Expect hard choices between homes, jobs and essential services.',derate:{from:14,to:19,mw:6},evt:'Grid operator: gas plant derated by 6 MW, 14:00–19:00.'},
+    {title:'49.7°C',brief:'The hottest day. Gas output is down 8 MW from 13:00 to 20:00 and the night brings little relief — evening demand stays high.',derate:{from:13,to:20,mw:8},lateHeat:0.06,evt:'Grid operator: gas plant derated by 8 MW, 13:00–20:00. Hot night ahead.'}
+  ];
+
+  const SHOP=[
+    {id:'solar',t:'Solar Farm',c:20,icon:'sun',x:'+12 MW of daytime solar generation.',tr:'Fades after 17:00 and produces nothing after sunset without storage.',rep:true,max:3},
+    {id:'bat',t:'Grid Battery',c:22,icon:'bat',x:'+20 MWh of storage (10 MW in or out). Charges from spare supply, discharges into the evening peak.',tr:'Limited energy: once empty it gives nothing until recharged.',rep:true,max:3},
+    {id:'eff',t:'Efficient AC Standard',c:15,icon:'leaf',x:'Cuts household electricity demand by 8%, every hour of every day.',tr:'Modest effect per step. Up to three steps.',rep:true,max:3},
+    {id:'pn',t:'Solar Pumps — North',c:15,icon:'drop',x:'North station runs on its own panels and storage: Medina, El Menzah and the hospital keep water through any outage.',tr:'Protects water, adds no power for homes.'},
+    {id:'ps',t:'Solar Pumps — South',c:15,icon:'drop',x:'South station runs on its own panels and storage: Ettadhamen and Les Berges keep water through any outage.',tr:'Protects water, adds no power for homes.'},
+    {id:'hosp',t:'Hospital Microgrid',c:18,icon:'cross',x:'Dedicated solar, storage and backup for the hospital. It stays powered even when the grid fails.',tr:'Serves one site only.'},
+    {id:'gas',t:'Emergency Gas Import',c:10,icon:'flame',x:'+20 MW of generation for tomorrow only.',tr:'Fossil dependence: the dirtiest power on the grid, and it must be bought again every day.',rep:true,daily:true}
+  ];
+  const SHOPBY={}; SHOP.forEach(s=>SHOPBY[s.id]=s);
+
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  function tab(T,t){const x=clamp(t-12,0,12),i=Math.min(11,Math.floor(x));return T[i]+(T[i+1]-T[i])*(x-i);}
+  const heatFactor=day=>1+CFG.HEAT_SLOPE*(CFG.TEMPS[day-1]-35);
+  function hourFactor(day,t){let f=tab(HF,t);const e=DAYINFO[day-1];if(e.lateHeat)f+=e.lateHeat*clamp(t-18,0,1);return f;}
+  /** Demand a district would draw if connected (MW). */
+  function want(S,d,t){let v=d.base*heatFactor(S.day)*hourFactor(S.day,t);if(d.type==='home')v*=1-CFG.EFF_STEP*S.eff;return v;}
+  function gridDemand(S,t){let s=0;for(const d of DISTRICTS){const st=S.d[d.id];if(st.on&&!st.prot)s+=want(S,d,t);}return s;}
+  function gasAvail(S,t){const e=DAYINFO[S.day-1].derate;return CFG.GAS_BASE-(e&&t>=e.from&&t<e.to?e.mw:0);}
+  const solarNow=(S,t)=>S.solarCap*tab(SF,t);
+  const battPower=S=>S.battUnits*CFG.BATT_MW;
+  /** Battery power that could be sustained for the next 15 minutes (MW). */
+  const battAvail=S=>Math.min(battPower(S),S.batt/0.25);
+  const firmSupply=(S,t)=>gasAvail(S,t)+S.gasImport+solarNow(S,t);
+
+  function blankTotals(){
+    return {want:0,served:0,clean:0,eveUnserved:0,dayUnserved:0,effSaved:0,emissions:0,impEm:0,trips:0,autoShed:0,
+      hospOutH:0,hospDryH:0,waterWant:0,waterOk:0,econLoss:0,hours:0,
+      outH:{medina:0,menzah:0,ettad:0,lac:0,indus:0,north:0,south:0,hosp:0},
+      dryH:{medina:0,menzah:0,ettad:0,lac:0,hosp:0},
+      loss:{heat:0,water:0,hosp:0,econ:0,trips:0}};
+  }
+  function newGame(){
+    const S={state:'MENU',day:1,t:12,budget:CFG.START_BUDGET,trust:100,
+      solarCap:CFG.SOLAR_BASE,battUnits:0,battCap:0,batt:0,eff:0,gasImport:0,
+      owned:{},purchases:[],grid:{status:'ok',overloadH:0,blackoutH:0},d:{},flags:{},
+      flow:{dem:0,firm:0,sol:0,gas:0,imp:0,bOut:0,bIn:0,short:0},tot:blankTotals(),dayStart:null};
+    for(const d of DISTRICTS)S.d[d.id]={on:true,served:true,prot:false,lock:0,water:true,res:1,dry:false,warned:false};
+    return S;
+  }
+  const clone=o=>JSON.parse(JSON.stringify(o));
+
+  function beginDay(S,emit){
+    if(S.state!=='READY')return false;
+    const e=DAYINFO[S.day-1];
+    S.t=12;S.grid={status:'ok',overloadH:0,blackoutH:0};S.flags={};
+    for(const d of DISTRICTS){const st=S.d[d.id];st.on=true;st.served=true;st.lock=0;st.water=true;st.dry=false;st.warned=false;st.res=(d.type==='pump'&&!st.prot&&e.resStart)?e.resStart:1;}
+    S.batt=S.battCap*CFG.BATT_START;
+    S.dayStart={tot:clone(S.tot),trust:S.trust};
+    S.state='PLAYING';
+    (emit||noop)('dayStart',{});
+    return true;
+  }
+  function noop(){}
+
+  function toggle(S,id,emit){
+    emit=emit||noop;
+    if(S.state!=='PLAYING')return false;
+    const d=BY[id],st=S.d[id];
+    if(!d||st.prot||st.lock>0)return false;
+    st.on=!st.on;st.lock=CFG.LOCK_H;
+    if(!st.on){
+      if(d.type==='home'){S.trust-=CFG.TR_CUT_HOME;S.tot.loss.heat+=CFG.TR_CUT_HOME;}
+      if(d.type==='hospital'){S.trust-=CFG.TR_CUT_HOSP;S.tot.loss.hosp+=CFG.TR_CUT_HOSP;}
+    }
+    emit('toggle',{d,on:st.on});
+    return true;
+  }
+
+  function restoreGrid(S,emit){
+    const G=S.grid,t=S.t;G.status='ok';G.overloadH=0;G.blackoutH=0;
+    // Automatic load-shedding so the restart cannot immediately trip again.
+    const avail=firmSupply(S,t)+Math.min(battPower(S),S.batt/0.5);
+    for(const id of SHED_ORDER){
+      if(gridDemand(S,t)<=avail*0.97)break;
+      const st=S.d[id];if(st.on&&!st.prot){st.on=false;st.lock=0;S.tot.autoShed++;emit('autoshed',{d:BY[id]});}
+    }
+    emit('restored',{});
+  }
+
+  /** Advance the simulation by dt simulated hours. */
+  function step(S,dt,emit){
+    if(S.state!=='PLAYING')return;
+    emit=emit||noop;
+    const t=S.t,day=S.day,G=S.grid,T=S.tot,e=DAYINFO[day-1],F=S.flags;
+    // Scripted notices (once per day)
+    if(!F.evt&&e.evt){F.evt=1;emit('notice',{msg:e.evt,cls:'warn'});}
+    if(!F.s17&&t>=17){F.s17=1;emit('notice',{msg:'Solar generation falling as evening approaches.',cls:'warn'});}
+    if(!F.s19&&t>=19){F.s19=1;emit('notice',{msg:'Sunset. Solar output is zero until morning.',cls:''});}
+    if(!F.heat&&day>=3&&t>=15){F.heat=1;emit('notice',{msg:'Heat alert: vulnerable households face prolonged exposure.',cls:'warn'});}
+    if(e.derate&&!F.d1&&t>=e.derate.from){F.d1=1;emit('notice',{msg:'Gas plant output down '+e.derate.mw+' MW in the heat.',cls:'warn'});}
+    if(e.derate&&!F.d2&&t>=e.derate.to){F.d2=1;emit('notice',{msg:'Gas plant back to full output.',cls:'good'});}
+
+    // ---- Power balance ----
+    const sol=solarNow(S,t),gasMax=gasAvail(S,t),impMax=S.gasImport,firm=gasMax+impMax+sol;
+    let dem=0,gas=0,imp=0,bOut=0,bIn=0,short=0;
+    if(G.status==='blackout'){G.blackoutH-=dt;if(G.blackoutH<=0)restoreGrid(S,emit);}
+    if(G.status!=='blackout'){
+      dem=gridDemand(S,t);
+      if(dem<=firm){
+        // Surplus: charge the battery. MW × hours = MWh, with charging losses.
+        if(S.battCap>0){
+          bIn=Math.max(0,Math.min(firm-dem,battPower(S),(S.battCap-S.batt)/(CFG.BATT_EFF*dt)));
+          S.batt=Math.min(S.battCap,S.batt+bIn*CFG.BATT_EFF*dt);
+        }
+        const thermal=Math.max(0,dem+bIn-sol);gas=Math.min(thermal,gasMax);imp=Math.max(0,thermal-gas);
+      }else{
+        // Deficit: discharge, limited by power rating and by the energy actually stored.
+        const deficit=dem-firm;
+        bOut=Math.max(0,Math.min(deficit,battPower(S),S.batt/dt));
+        S.batt=Math.max(0,S.batt-bOut*dt);
+        short=deficit-bOut;gas=gasMax;imp=impMax;
+      }
+      if(short>0.05){
+        if(G.status!=='overload'){G.status='overload';emit('overload',{dem,sup:firm+bOut});}
+        G.overloadH+=dt;
+        if(G.overloadH>=CFG.GRACE_H){
+          G.status='blackout';G.blackoutH=CFG.BLACKOUT_H;G.overloadH=0;
+          T.trips++;S.trust-=CFG.TR_TRIP;T.loss.trips+=CFG.TR_TRIP;
+          emit('trip',{dem,sup:firm+bOut});
+        }
+      }else{
+        if(G.status==='overload')emit('overloadCleared',{});
+        G.status='ok';G.overloadH=0;
+      }
+      const em=(gas*CFG.EF_GAS+imp*CFG.EF_IMPORT)*dt;T.emissions+=em;T.impEm+=imp*CFG.EF_IMPORT*dt;
+    }
+    S.flow={dem,firm,sol,gas,imp,gasMax,impMax,bOut,bIn,short};
+
+    // ---- Service delivered ----
+    const black=G.status==='blackout';
+    for(const d of DISTRICTS){const st=S.d[d.id];if(st.lock>0)st.lock=Math.max(0,st.lock-dt);st.served=st.prot||(st.on&&!black);}
+    // Reservoirs buffer water for a while after a pump loses power
+    for(const p of PUMPS){
+      const st=S.d[p.id];
+      if(st.prot){st.res=1;st.dry=false;continue;}
+      if(st.served)st.res=Math.min(1,st.res+dt*CFG.REFILL);
+      else st.res=Math.max(0,st.res-dt*CFG.DRAIN*(1+0.12*(day-1))*(e.drain||1));
+      if(!st.dry&&st.res<=0){st.dry=true;emit('dry',{p});}
+      else if(st.dry&&st.res>=CFG.RES_BACK){st.dry=false;emit('wet',{p});}
+      if(!st.served&&!st.dry&&st.res<0.35&&!st.warned){st.warned=true;emit('reslow',{p});}
+      if(st.res>0.6)st.warned=false;
+    }
+    // ---- Consequences ----
+    const L=T.loss,heatMult=1+0.12*(day-1);let loss=0,econ=0;
+    for(const d of DISTRICTS){
+      const st=S.d[d.id],w=want(S,d,t);
+      T.want+=w*dt;
+      if(st.served){T.served+=w*dt;if(st.prot)T.clean+=w*dt;}
+      else{T.outH[d.id]+=dt;if(t>=18.5)T.eveUnserved+=w*dt;else T.dayUnserved+=w*dt;}
+      if(d.type==='home'&&S.eff&&st.served)T.effSaved+=w/(1-CFG.EFF_STEP*S.eff)*CFG.EFF_STEP*S.eff*dt;
+      const water=!d.pump||!S.d[d.pump].dry;st.water=water;
+      if(d.pump){T.waterWant+=d.ww*dt;if(water)T.waterOk+=d.ww*dt;else T.dryH[d.id]+=dt;}
+      if(d.type==='home'){
+        if(!st.served){const x=CFG.TR_HOME*d.vuln*heatMult*dt;loss+=x;L.heat+=x;}
+        if(!water){const x=CFG.TR_WATER*d.vuln*dt;loss+=x;L.water+=x;}
+      }else if(d.type==='hospital'){
+        if(!st.served){
+          T.hospOutH+=dt;const x=CFG.TR_HOSP*dt;loss+=x;L.hosp+=x;T.emissions+=w*CFG.EF_DIESEL*dt;
+          if(!F.hb){F.hb=1;emit('hospBackup',{});}
+        }else F.hb=0;
+        if(!water){T.hospDryH+=dt;const x=CFG.TR_HOSP_DRY*dt;loss+=x;L.hosp+=x;}
+      }else if(d.econ){
+        if(!st.served){const x=CFG.TR_ECON*dt;loss+=x;L.econ+=x;econ+=d.econ*dt;}
+        if(d.pump&&!water){const x=CFG.TR_LAC_DRY*dt;loss+=x;L.water+=x;}
+      }
+    }
+    if(econ>0){T.econLoss+=econ;S.budget=Math.max(0,S.budget-econ);}   // budget can never go negative
+    if(loss>0)S.trust-=loss;else if(G.status==='ok')S.trust+=CFG.TR_RECOVER*dt;
+    S.trust=clamp(S.trust,0,100);
+    T.hours+=dt;
+    S.t=Math.min(24,t+dt);
+    if(S.trust<=0){S.state='GAME_OVER';emit('gameOver',{});return;}
+    if(S.t>=24-1e-9){
+      S.t=24;
+      if(S.day>=CFG.DAYS){S.state='VICTORY';emit('victory',{});}
+      else{S.gasImport=0;S.budget+=CFG.DAILY_BUDGET;S.state='DAY_SUMMARY';emit('dayEnd',{});}
+    }
+  }
+
+  function canBuy(S,id){
+    const it=SHOPBY[id];if(!it)return {ok:false,why:'Unknown'};
+    if(S.state!=='UPGRADE_SHOP')return {ok:false,why:'Closed'};
+    const n=S.owned[id]||0;
+    if(!it.rep&&n>0)return {ok:false,why:'Built',owned:true};
+    if(it.daily&&S.gasImport>0)return {ok:false,why:'Contracted for tomorrow',owned:true};
+    if(!it.daily&&it.max&&n>=it.max)return {ok:false,why:'Maximum reached',owned:true};
+    if(S.budget+1e-9<it.c)return {ok:false,why:'Not enough budget'};
+    return {ok:true};
+  }
+  function buy(S,id,emit){
+    if(!canBuy(S,id).ok)return false;
+    const it=SHOPBY[id];
+    S.budget=Math.max(0,S.budget-it.c);S.owned[id]=(S.owned[id]||0)+1;S.purchases.push({day:S.day,id});
+    if(id==='solar')S.solarCap+=12;
+    if(id==='bat'){S.battUnits++;S.battCap+=CFG.BATT_MWH;}
+    if(id==='eff')S.eff=Math.min(CFG.EFF_MAX,S.eff+1);
+    if(id==='pn'){S.d.north.prot=true;S.d.north.res=1;}
+    if(id==='ps'){S.d.south.prot=true;S.d.south.res=1;}
+    if(id==='hosp')S.d.hosp.prot=true;
+    if(id==='gas')S.gasImport=20;
+    (emit||noop)('bought',{it});
+    return true;
+  }
+  function openShop(S){if(S.state!=='DAY_SUMMARY')return false;S.state='UPGRADE_SHOP';return true;}
+  function nextDay(S){if(S.state!=='UPGRADE_SHOP'||S.day>=CFG.DAYS)return false;S.day++;S.t=12;S.state='READY';return true;}
+
+  /** Forecast for the current day: firm supply (no battery) and demand if every grid district stays on. */
+  function forecast(S){
+    const out=[];let peakGap=-1e9,peakT=12,peakDem=0,minSup=1e9;
+    for(let t=12;t<=24.001;t+=0.25){
+      let dem=0;for(const d of DISTRICTS)if(!S.d[d.id].prot)dem+=want(S,d,t);
+      const sup=firmSupply(S,Math.min(t,23.999));
+      out.push({t,dem,sup});
+      if(dem-sup>peakGap){peakGap=dem-sup;peakT=t;}
+      peakDem=Math.max(peakDem,dem);minSup=Math.min(minSup,sup);
+    }
+    return {pts:out,peakGap,peakT,peakDem,minSup};
+  }
+
+  /** Final score out of 100. Rewards service actually delivered, not the absence of trips. */
+  function score(S){
+    const T=S.tot,VH=CFG.DAYS*12;
+    const f=T.want>0?T.served/T.want:0;
+    const w=T.waterWant>0?T.waterOk/T.waterWant:0;
+    const reliability=Math.max(0,25*clamp((f-0.70)/0.30,0,1)-1.5*T.trips);
+    const water=25*clamp((w-0.70)/0.30,0,1);
+    const hospital=20*clamp(1-(T.hospOutH+0.5*T.hospDryH)/5,0,1);
+    let hNum=0,hDen=0;for(const d of DISTRICTS)if(d.type==='home'){hNum+=d.vuln*T.outH[d.id];hDen+=d.vuln*Math.max(T.hours,1);}
+    const hardship=hDen?hNum/hDen:0;                       // vulnerability-weighted share of hours without power
+    const equity=6*clamp(1-hardship/0.12,0,1);
+    const trustPts=9*S.trust/100;
+    const gridMWh=T.served-T.clean;                         // off-grid solar sites are excluded: they neither burn gas nor dilute the figure
+    const intensity=gridMWh>0?T.emissions/gridMWh:0.45;    // t CO2 per MWh delivered by the grid
+    const env=15*clamp((0.46-intensity)/0.05,0,1)*clamp((f-0.5)/0.4,0,1); // no credit for "clean" blackouts
+    const progress=clamp(T.hours/VH,0,1);                  // an unfinished campaign cannot score full marks
+    const parts={reliability,water,hospital,social:trustPts+equity,env};
+    let total=0;for(const k in parts){parts[k]*=progress;total+=parts[k];}
+    total=Math.round(clamp(total,0,100));
+    const rating=total>=90?'Resilient City':total>=75?'Crisis Managed':total>=60?'Fragile Recovery':total>=40?'Emergency Response':'Systemic Failure';
+    return {total,rating,parts,f,w,hardship,intensity,progress};
+  }
+
+  /** Headless full-campaign run for tests and balancing. bot(S) acts every step; shopper(S) buys at night. */
+  function simulate(bot,shopper){
+    const S=newGame();S.state='READY';let guard=0;
+    while(guard++<100000){
+      if(S.state==='READY')beginDay(S);
+      else if(S.state==='PLAYING'){if(bot)bot(S);step(S,CFG.STEP_H);}
+      else if(S.state==='DAY_SUMMARY'){openShop(S);if(shopper)shopper(S);nextDay(S);}
+      else break;
+    }
+    return {S,score:score(S)};
+  }
+
+  return {CFG,DISTRICTS,BY,PUMPS,DAYINFO,SHOP,SHOPBY,clamp,want,gridDemand,gasAvail,solarNow,battPower,battAvail,firmSupply,
+    newGame,beginDay,toggle,step,canBuy,buy,openShop,nextDay,forecast,score,simulate,heatFactor};
+})();
+
+/* =====================================================================
+   2. PERSISTENCE (best score, mute) — safe when storage is unavailable
+   ===================================================================== */
+const Store={
+  get(k){try{return window.localStorage.getItem('coupure.'+k);}catch(e){return null;}},
+  set(k,v){try{window.localStorage.setItem('coupure.'+k,String(v));}catch(e){}}
+};
+let best=parseInt(Store.get('best'),10);if(!isFinite(best))best=null;
+
+/* =====================================================================
+   3. AUDIO — tiny Web Audio synth, created only after a user gesture
+   ===================================================================== */
+const Sound=(function(){
+  let ctx=null,muted=Store.get('mute')==='1',hum=null;
+  function ensure(){
+    if(ctx||muted)return ctx;
+    try{const AC=window.AudioContext||window.webkitAudioContext;if(AC)ctx=new AC();}catch(e){ctx=null;}
+    return ctx;
+  }
+  function tone(freq,dur,type,vol,to,delay){
+    if(muted||!ensure())return;
+    try{
+      if(ctx.state==='suspended')ctx.resume();
+      const t0=ctx.currentTime+(delay||0),o=ctx.createOscillator(),g=ctx.createGain();
+      o.type=type||'sine';o.frequency.setValueAtTime(freq,t0);
+      if(to)o.frequency.exponentialRampToValueAtTime(to,t0+dur);
+      g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(vol||0.08,t0+0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+      o.connect(g);g.connect(ctx.destination);o.start(t0);o.stop(t0+dur+0.03);
+    }catch(e){}
+  }
+  function setHum(on){
+    try{
+      if(on&&!muted&&ensure()&&!hum){
+        const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=50;g.gain.value=0.012;
+        o.connect(g);g.connect(ctx.destination);o.start();hum={o,g};
+      }else if((!on||muted)&&hum){hum.o.stop();hum=null;}
+    }catch(e){hum=null;}
+  }
+  return {
+    get muted(){return muted;},
+    toggleMute(){muted=!muted;Store.set('mute',muted?'1':'0');if(muted)setHum(false);return muted;},
+    hum:setHum,
+    cut(){tone(220,0.09,'square',0.05,90);},
+    restore(){tone(330,0.08,'square',0.04,660);},
+    deny(){tone(140,0.07,'sawtooth',0.03);},
+    buy(){tone(523,0.1,'triangle',0.07);tone(784,0.16,'triangle',0.07,null,0.09);},
+    day(){tone(392,0.14,'sine',0.07);tone(523,0.14,'sine',0.07,null,0.13);tone(659,0.24,'sine',0.07,null,0.26);},
+    warn(){tone(880,0.09,'sine',0.045);tone(880,0.09,'sine',0.045,null,0.16);},
+    alarm(){for(let i=0;i<3;i++)tone(620,0.22,'sawtooth',0.06,410,i*0.27);},
+    fail(){tone(196,0.5,'sine',0.09,98);tone(147,0.8,'sine',0.07,65,0.35);},
+    win(){[392,494,587,784].forEach((f,i)=>tone(f,0.3,'sine',0.07,null,i*0.16));},
+    click(){tone(600,0.04,'sine',0.03);}
+  };
+})();
+
+/* =====================================================================
+   4. UI — rendering, input, screens
+   ===================================================================== */
+const {CFG,DISTRICTS,BY,PUMPS,DAYINFO,SHOP}=Sim;
+const $=id=>document.getElementById(id);
+let S=Sim.newGame();
+let modal=null;                 // 'tutorial' | 'about' | 'confirm' | null
+let acc=0,lastTs=0,speed=1;     // real-time accumulator (ms)
+let fc=null,trace=[];           // today's forecast + live demand trace
+const STEP_MS=CFG.DAY_SECONDS*1000/(12/CFG.STEP_H);
+const logSeen={};
+
+const ICONS={
+  hospital:'<path d="M4 20V6l8-3 8 3v14M9 20v-4h6v4M12 7v6M9 10h6"/>',
+  pump:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z"/>',
+  home:'<path d="M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6"/>',
+  commercial:'<path d="M4 20V5h9v15M13 9h7v11M7 8h3M7 12h3M7 16h3M16 13h1M16 17h1"/>',
+  industry:'<path d="M3 20V10l6 4V10l6 4V5h4v15z"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+  bat:'<rect x="3" y="8" width="16" height="9" rx="1.500"/><path d="M21 11v3M7 11v3M10.500 11v3"/>',
+  leaf:'<path d="M5 19c0-9 5-14 15-14 0 10-5 15-14 14zM5 19l8-8"/>',
+  drop:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.500 6-11 6-11z"/>',
+  cross:'<path d="M9 4h6v5h5v6h-5v5H9v-5H4V9h5z"/>',
+  flame:'<path d="M12 3c1 4 5 5.500 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z"/>',
+  bolt:'<path d="M13 2L5 13h6l-1 9 8-11h-6z"/>',
+  pause:'<path d="M8 5v14M16 5v14"/>',play:'<path d="M7 4l12 8-12 8z"/>',
+  sound:'<path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6M18.500 6.500a8 8 0 0 1 0 11"/>',
+  mute:'<path d="M4 9v6h4l5 4V5L8 9zM16 9l5 6M21 9l-5 6"/>',
+  restart:'<path d="M4 12a8 8 0 1 0 2.500-5.800M4 4v5h5"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.500v.5"/>',
+  eye:'<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'
+};
+const ic=n=>'<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">'+ICONS[n]+'</svg>';
+const pad=n=>String(n).padStart(2,'0');
+const clock=t=>{const m=Math.round(t*60),h=Math.floor(m/60);return pad(h)+':'+pad(m%60);};
+const fmt=(v,d)=>(+v).toFixed(d||0);
+function setT(el,v){if(el._v!==v){el._v=v;el.textContent=v;}}
+function setC(el,v){if(el._c!==v){el._c=v;el.className=v;}}
+function setW(el,v){if(el._w!==v){el._w=v;el.style.width=v;}}
+
+/* ---------- Board (built once, then patched) ---------- */
+const tiles={};
+function buildBoard(){
+  const board=$('board');board.textContent='';
+  DISTRICTS.forEach((d,i)=>{
+    const b=document.createElement('button');
+    b.className='tile t-'+d.type+(d.crit?' crit':'');b.dataset.d=d.id;b.type='button';
+    const meta=d.type==='home'?'Heat vulnerability: <b>'+d.vl+'</b>'
+      :d.type==='pump'?'Feeds '+d.feeds.map(x=>BY[x].name.replace('Regional ','').replace('Cité ','')).join(', ')
+      :d.type==='hospital'?'Backup: diesel generator'
+      :'Cut costs '+fmt(d.econ,1)+' M TND per hour';
+    b.innerHTML='<span class="lamp"></span>'
+      +'<span class="t-top">'+ic(d.type)+'<span>'+(d.crit?'<span class="crit-l">Critical</span> · ':'')+d.tag+'</span></span>'
+      +'<span class="t-name">'+d.name+'</span>'
+      +'<span class="t-ar" lang="ar" dir="rtl">'+d.ar+'</span>'
+      +'<span class="t-water"></span>'
+      +'<span class="t-meta">'+meta+'</span>'
+      +'<span class="t-foot"><span class="t-mw"></span><span class="pill"></span></span>'
+      +'<span class="t-key" aria-hidden="true">'+(i+1)+'</span>';
+    board.appendChild(b);
+    tiles[d.id]={el:b,water:b.querySelector('.t-water'),mw:b.querySelector('.t-mw'),pill:b.querySelector('.pill'),wState:''};
+    b.addEventListener('click',()=>onToggle(d.id));
+    const show=()=>{$('inspect').innerHTML='<b>'+d.name+'</b> — '+d.desc;};
+    b.addEventListener('mouseenter',show);b.addEventListener('focus',show);
+  });
+}
+function onToggle(id){
+  if(S.state!=='PLAYING'||modal)return;
+  const st=S.d[id];
+  if(st.prot)return;
+  if(!Sim.toggle(S,id,onEvent)){Sound.deny();return;}
+  render();
+}
+
+function renderTiles(){
+  const black=S.grid.status==='blackout',t=Math.min(S.t,23.999),playing=S.state==='PLAYING';
+  for(const d of DISTRICTS){
+    const st=S.d[d.id],T=tiles[d.id],w=Sim.want(S,d,t);
+    let cls='tile t-'+d.type+(d.crit?' crit':''),pill,mw;
+    if(st.prot){cls+=' is-prot';pill=d.type==='hospital'?'MICROGRID':'SOLAR · PROTECTED';mw='Off-grid · 0 MW';}
+    else if(!st.on){cls+=' is-cut';pill=d.type==='hospital'?'CUT · ON BACKUP':'CUT';mw='Saves '+fmt(w)+' MW';if(d.type==='hospital')cls+=' is-backup';}
+    else if(black){cls+=' is-black';pill=d.type==='hospital'?'BLACKOUT · BACKUP':'BLACKOUT';mw='Grid down';}
+    else{pill='POWERED';mw=fmt(w)+' MW';}
+    if(st.lock>0&&!st.prot)cls+=' is-lock';
+    if(d.pump&&!st.water)cls+=' is-dry';
+    if(d.type==='pump'&&st.dry)cls+=' is-dry';
+    if(T.anim)cls+=' '+T.anim;
+    setC(T.el,cls);setT(T.pill,pill);setT(T.mw,mw);
+    T.el.disabled=st.prot||!playing;
+    T.el.setAttribute('aria-pressed',String(st.on));
+    T.el.setAttribute('aria-label',d.name+': '+pill.toLowerCase()+(st.prot?'':st.on?'. Activate to cut power.':'. Activate to restore power.'));
+    // Water line
+    if(d.type==='pump'){
+      const pct=Math.round(st.res*100),key=(st.prot?'p':st.dry?'d':st.served?'f':'e')+pct;
+      if(T.wState!==key){
+        T.wState=key;
+        if(st.prot){T.water.className='t-water safe';T.water.innerHTML=ic('sun')+'Reservoir secure';}
+        else{
+          T.water.className='t-water'+(st.dry||pct<35?' dry':'');
+          T.water.innerHTML='<span>'+(st.dry?'RESERVOIR EMPTY':'Reservoir')+'</span><span class="tank"><i style="width:'+pct+'%"></i></span><span class="mono">'+pct+'%</span>';
+        }
+      }
+    }else if(d.pump){
+      const key=st.water?'ok':'dry';
+      if(T.wState!==key){
+        T.wState=key;const pn=d.pump==='north'?'North':'South';
+        T.water.className='t-water'+(st.water?'':' dry');
+        T.water.innerHTML=ic('drop')+(st.water?'Water on · '+pn+' station':'WATER OUTAGE · '+pn+' reservoir empty');
+      }
+    }else if(T.wState!=='own'){T.wState='own';T.water.className='t-water none';T.water.innerHTML=ic('drop')+'Own water supply';}
+  }
+}
+
+/* ---------- HUD + grid panel ---------- */
+let lastTrustShown=100,alertUntil=0;
+function render(){
+  const t=Math.min(S.t,23.999),G=S.grid;
+  setT($('hDay'),S.day+'/'+CFG.DAYS);
+  setT($('hClock'),clock(S.t));
+  setT($('hTemp'),CFG.TEMPS[S.day-1]+'°C');
+  const left=Math.max(0,Math.ceil((24-S.t)/12*CFG.DAY_SECONDS-1e-6));
+  $('hLeft').firstChild.nodeValue=String(left);
+  setW($('dayProg'),((S.t-12)/12*100).toFixed(1)+'%');
+  const tr=Math.round(S.trust);
+  if(tr!==lastTrustShown){
+    const el=$('hTrust');el.textContent=tr;
+    if(tr<=lastTrustShown-1||tr>lastTrustShown){el.classList.remove('flash-down','flash-up');void el.offsetWidth;el.classList.add(tr<lastTrustShown?'flash-down':'flash-up');}
+    lastTrustShown=tr;
+  }
+  setW($('hTrustBar'),S.trust.toFixed(1)+'%');
+  setC($('hTrustBox'),'stat trust'+(S.trust<30?' low':S.trust<60?' mid':''));
+  $('hBudget').firstChild.nodeValue=String(Math.floor(S.budget+1e-6));
+
+  // Supply stack and demand marker
+  const black=G.status==='blackout';
+  const gas=Sim.gasAvail(S,t),imp=S.gasImport,sol=Sim.solarNow(S,t),bat=Sim.battAvail(S);
+  const dem=black?0:Sim.gridDemand(S,t),sup=gas+imp+sol+bat,margin=sup-dem;
+  const scale=(fc?Math.max(fc.peakDem,CFG.GAS_BASE+imp+S.solarCap+Sim.battPower(S)):200)*1.06;
+  const pc=v=>(100*Math.max(0,v)/scale).toFixed(2)+'%';
+  const eg=$('bGas'),ei=$('bImp'),es=$('bSun'),eb=$('bBat');
+  eg.style.left='0';eg.style.width=pc(gas);ei.style.left=pc(gas);ei.style.width=pc(imp);
+  es.style.left=pc(gas+imp);es.style.width=pc(sol);eb.style.left=pc(gas+imp+sol);eb.style.width=pc(bat);
+  $('bDem').style.left='calc('+pc(Math.min(dem,scale))+' - 1px)';
+  $('lgImp').hidden=!imp;$('lgBat').hidden=!S.battCap;
+  setT($('rDem'),black?'— MW':fmt(dem)+' MW');
+  setT($('rSup'),fmt(sup)+' MW');
+  const rm=$('rMar');setT(rm,black?'GRID DOWN':(margin>=0?'+':'−')+fmt(Math.abs(margin))+' MW');
+  setC(rm,'v '+(black||margin<0?'neg':margin<sup*0.05?'tight':'pos'));
+  // Forecast one hour ahead with current switching
+  const t1=Math.min(23.999,t+1);let nd=0;
+  for(const d of DISTRICTS){const st=S.d[d.id];if(st.on&&!st.prot)nd+=Sim.want(S,d,t1);}
+  const ns=Sim.firmSupply(S,t1)+bat,nm=ns-nd;
+  const rn=$('rNext');setT(rn,S.t>=23?'Shift ends':(nm>=0?'+':'−')+fmt(Math.abs(nm))+' MW');setC(rn,'v '+(S.t>=23?'':nm<0?'neg':nm<ns*0.05?'tight':'pos'));
+  const rb=$('rBat');
+  if(!S.battCap)setT(rb,'None');
+  else setT(rb,fmt(S.batt)+'/'+S.battCap+' MWh'+(S.flow.bIn>0.1&&S.state==='PLAYING'?' ▲':S.flow.bOut>0.1&&S.state==='PLAYING'?' ▼':''));
+  // Verdict
+  const v=$('verdict'),gp=$('gridPanel');let vc='ok',vt='STABLE';
+  if(black){vc='bad';vt='BLACKOUT · RESTART IN '+Math.max(1,Math.ceil(G.blackoutH/12*CFG.DAY_SECONDS))+'s';}
+  else if(G.status==='overload'){vc='bad';vt='OVERLOAD · TRIP IN '+Math.max(1,Math.ceil((CFG.GRACE_H-G.overloadH)/12*CFG.DAY_SECONDS))+'s';}
+  else if(margin<sup*0.05){vc='warn';vt='NEAR LIMIT · '+fmt(Math.max(0,margin))+' MW LEFT';}
+  else if(nm<0&&S.t<23){vc='warn';vt='SHORTFALL WITHIN THE HOUR';}
+  setT(v,vt);setC(v,'verdict '+vc);setC(gp,'panel gridpanel'+(vc==='ok'?'':' '+vc));
+
+  // Shift record
+  const T=S.tot;
+  setT($('sServed'),(T.want?Math.round(100*T.served/T.want):100)+'%');
+  setT($('sWater'),(T.waterWant?Math.round(100*T.waterOk/T.waterWant):100)+'%');
+  setT($('sTrips'),String(T.trips));
+  setT($('sHosp'),fmt(T.hospOutH,1)+' h');
+  setT($('sEcon'),fmt(T.econLoss,1)+' M');
+  setT($('sCo2'),fmt(T.emissions)+' t CO₂');
+
+  renderTiles();
+  const playing=S.state==='PLAYING',paused=S.state==='PAUSED';
+  const bp=$('bPause');bp.disabled=!(playing||paused);
+  if(bp._s!==paused){bp._s=paused;bp.innerHTML=ic(paused?'play':'pause');bp.setAttribute('aria-label',paused?'Resume':'Pause');}
+  $('bRestart').disabled=S.state==='MENU'||S.state==='TUTORIAL';
+}
+
+/* ---------- Forecast chart ---------- */
+function drawChart(){
+  fc=Sim.forecast(S);trace=[];
+  const sc=Math.max(fc.peakDem,CFG.GAS_BASE+S.gasImport+S.solarCap)*1.08,lo=sc*0.45;
+  const X=t=>((t-12)/12*300).toFixed(1),Y=v=>(90-(Math.max(lo,v)-lo)/(sc-lo)*84).toFixed(1);
+  fc.X=X;fc.Y=Y;
+  const sup=fc.pts.map(p=>X(p.t)+','+Y(p.sup)).join(' '),dem=fc.pts.map(p=>X(p.t)+','+Y(p.dem)).join(' ');
+  // Shade the hours where full demand exceeds firm supply
+  let gap='';const over=fc.pts.filter(p=>p.dem>p.sup);
+  if(over.length>1)gap='<polygon fill="rgba(255,93,74,.16)" points="'+over.map(p=>X(p.t)+','+Y(p.dem)).join(' ')+' '+over.slice().reverse().map(p=>X(p.t)+','+Y(p.sup)).join(' ')+'"/>';
+  let grid='';for(let h=15;h<24;h+=3)grid+='<line x1="'+X(h)+'" x2="'+X(h)+'" y1="0" y2="92" stroke="#1c2830" stroke-width="1"/>';
+  $('chart').innerHTML=grid+gap
+    +'<polyline fill="none" stroke="#8c9ca4" stroke-width="1.200" stroke-dasharray="3 3" points="'+dem+'"/>'
+    +'<polyline fill="none" stroke="#ffb547" stroke-width="1.800" points="'+sup+'"/>'
+    +'<polyline id="chTrace" fill="none" stroke="#e9eee7" stroke-width="1.800" points=""/>'
+    +'<line id="chNow" x1="0" x2="0" y1="0" y2="92" stroke="#e9eee7" stroke-width="1" opacity=".55"/>'
+    +'<text x="4" y="10" fill="#ffb547" font-size="7.500" font-family="monospace">SUPPLY</text>'
+    +'<text x="46" y="10" fill="#8c9ca4" font-size="7.500" font-family="monospace">DEMAND IF ALL CONNECTED</text>'
+    +'<text x="170" y="10" fill="#e9eee7" font-size="7.500" font-family="monospace">YOUR LOAD</text>';
+}
+function updateChart(){
+  if(!fc)return;
+  const now=$('chNow');if(!now)return;
+  const x=fc.X(S.t);now.setAttribute('x1',x);now.setAttribute('x2',x);
+  if(S.state==='PLAYING'&&(!trace.length||S.t-trace[trace.length-1].t>=0.1)){
+    trace.push({t:S.t,v:S.grid.status==='blackout'?0:S.flow.dem});
+    $('chTrace').setAttribute('points',trace.map(p=>fc.X(p.t)+','+fc.Y(p.v)).join(' '));
+  }
+}
+
+/* ---------- Log + alerts ---------- */
+function addLog(msg,cls,key){
+  const now=S.day*24+S.t;
+  if(key){if(logSeen[key]!==undefined&&now-logSeen[key]<1.5)return;logSeen[key]=now;}
+  const li=document.createElement('li');if(cls)li.className=cls;
+  const b=document.createElement('b');b.textContent='D'+S.day+' '+clock(S.t);
+  li.appendChild(b);li.appendChild(document.createTextNode(msg));
+  const log=$('log');log.insertBefore(li,log.firstChild);
+  while(log.children.length>60)log.removeChild(log.lastChild);
+}
+function alertMsg(msg,cls,hold){
+  const a=$('alert');a.textContent=msg;a.className='alert '+(cls||'');void a.offsetWidth;a.classList.add('pop');
+  alertUntil=performance.now()+(hold||4500);
+}
+function idleAlert(){
+  if(S.state!=='PLAYING'||performance.now()<alertUntil)return;
+  const a=$('alert'),G=S.grid;let m,c='';
+  if(G.status==='overload'){m='Demand exceeds supply. Disconnect a district now or the grid will trip.';c='bad';}
+  else if(G.status==='blackout'){m='Citywide blackout. Disconnect districts now so the restart holds.';c='bad';}
+  else{
+    const cuts=DISTRICTS.filter(d=>!S.d[d.id].on&&!S.d[d.id].prot).length;
+    m=cuts?cuts+' district'+(cuts>1?'s':'')+' disconnected. Restore power when the margin allows.':'All districts connected.';
+  }
+  if(a._m!==m){a._m=m;a.textContent=m;a.className='alert '+c;}
+}
+
+/* ---------- Simulation events → feedback ---------- */
+function onEvent(type,p){
+  switch(type){
+    case 'toggle':{
+      const T=tiles[p.d.id];T.anim=p.on?'anim-on':'anim-off';setTimeout(()=>{T.anim='';},520);
+      if(p.on){Sound.restore();addLog(p.d.name+' reconnected.','good');}
+      else{
+        Sound.cut();
+        if(p.d.type==='hospital'){addLog('Regional Hospital disconnected. Backup power activated — surgeries postponed, patient risk rising.','bad');alertMsg('Hospital on backup diesel. Critical care is at risk.','bad');}
+        else if(p.d.type==='pump'){addLog(p.d.name+' disconnected. Reservoir draining.','warn');alertMsg(p.d.name+' has no power: its reservoir is draining. '+p.d.feeds.map(x=>BY[x].name).join(', ')+' depend on it.','warn');}
+        else addLog(p.d.name+' disconnected.','');
+      }
+      break;}
+    case 'notice':addLog(p.msg,p.cls);if(p.cls==='warn')alertMsg(p.msg,'warn');break;
+    case 'overload':addLog('Demand is above supply ('+fmt(p.dem)+' vs '+fmt(p.sup)+' MW). Shed load now.','bad','ovl');alertMsg('OVERLOAD — demand '+fmt(p.dem)+' MW, supply '+fmt(p.sup)+' MW. Disconnect a district now.','bad',2500);Sound.warn();break;
+    case 'overloadCleared':addLog('Overload cleared. Grid stable.','good','ovc');alertMsg('Overload averted. Grid stable.','good',2500);break;
+    case 'trip':
+      addLog('GRID OVERLOAD — emergency shutdown. Demand '+fmt(p.dem)+' MW exceeded supply '+fmt(p.sup)+' MW. The whole city is dark for an hour.','bad');
+      alertMsg('GRID FAILURE — demand exceeded supply. Citywide blackout for one hour. Public trust −'+CFG.TR_TRIP+'.','bad',5000);
+      Sound.alarm();
+      {const dk=$('deck'),fl=$('tripflash');dk.classList.remove('shake');fl.classList.remove('go');void dk.offsetWidth;dk.classList.add('shake');fl.classList.add('go');setTimeout(()=>{dk.classList.remove('shake');fl.classList.remove('go');},1000);}
+      break;
+    case 'autoshed':addLog('Automatic load-shedding disconnected '+p.d.name+' to restart the grid.','warn');break;
+    case 'restored':addLog('Grid restarted.','good');alertMsg('Grid restarted. Districts shed automatically stay disconnected until you restore them.','good');break;
+    case 'reslow':addLog(p.p.name.replace(' Pumping Station','')+' reservoir critically low.','warn');alertMsg('Water authority: '+p.p.name.replace(' Pumping Station','')+' reservoir critically low. Restore the pumping station.','warn');Sound.warn();break;
+    case 'dry':
+      addLog('Water outage in '+p.p.feeds.map(x=>BY[x].name).join(', ')+': '+p.p.name+' has no power and its reservoir is empty.','bad');
+      alertMsg('WATER OUTAGE — '+p.p.feeds.map(x=>BY[x].name).join(', ')+'. The pumping station lost power and the reservoir ran dry.','bad',5500);Sound.warn();break;
+    case 'wet':addLog('Water restored downstream of '+p.p.name+'.','good');break;
+    case 'hospBackup':if(S.grid.status==='blackout')addLog('Hospital backup power activated during blackout.','bad','hb');break;
+    case 'dayStart':addLog('Day '+S.day+' shift begins. Forecast high '+CFG.TEMPS[S.day-1]+'°C.','');break;
+    case 'dayEnd':Sound.hum(false);Sound.day();addLog('Day '+S.day+' complete. Ministry releases '+CFG.DAILY_BUDGET+' M TND.','good');showScreen();break;
+    case 'victory':Sound.hum(false);Sound.win();finish();break;
+    case 'gameOver':Sound.hum(false);Sound.fail();addLog('Public trust has collapsed.','bad');finish();break;
+    case 'bought':Sound.buy();addLog('Investment completed: '+p.it.t+'.','good');break;
+  }
+}
+let lastTrustWarn=100;
+function trustWatch(){
+  if(S.trust<lastTrustWarn-15){lastTrustWarn=S.trust;addLog('Public trust falling ('+Math.round(S.trust)+').','warn');}
+  if(S.trust>lastTrustWarn)lastTrustWarn=Math.max(lastTrustWarn,S.trust-1);
+}
+let finalScore=null,newBest=false;
+function finish(){
+  finalScore=Sim.score(S);newBest=false;
+  if(S.state==='VICTORY'&&(best===null||finalScore.total>best)){best=finalScore.total;newBest=true;Store.set('best',best);}
+  showScreen();
+}
+
+/* ---------- Screens ---------- */
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function showScreen(){
+  const menu=$('menu'),sl=$('sheetLayer');
+  const st=S.state;
+  menu.hidden=!(st==='MENU'||st==='TUTORIAL');
+  if(!menu.hidden&&!menu._built){menu._built=true;menu.innerHTML=menuHTML();}
+  if(!menu.hidden){const b=menu.querySelector('#bestLine');if(b)b.innerHTML=best!==null?'Best score <b>'+best+'/100</b>':'No completed campaign yet';}
+  let h='';
+  if(st==='READY')h=readyHTML();
+  else if(st==='PAUSED')h=pauseHTML();
+  else if(st==='DAY_SUMMARY')h=reportHTML();
+  else if(st==='UPGRADE_SHOP')h=shopHTML();
+  else if(st==='VICTORY'||st==='GAME_OVER')h=resultsHTML();
+  sl.hidden=!h;
+  if(h){sl.innerHTML=h;sl.scrollTop=0;if(st==='VICTORY'||st==='GAME_OVER')requestAnimationFrame(()=>{const fg=sl.querySelector('.ring .fg');if(fg)fg.style.strokeDashoffset=fg.dataset.to;});}
+  else sl.innerHTML='';
+  showModal();
+  render();
+  if(!modal)focusPrimary(menu.hidden?sl:menu);
+}
+function focusPrimary(root){const p=root&&!root.hidden&&root.querySelector('[data-primary]');if(p)try{p.focus({preventScroll:true});}catch(e){}}
+function showModal(){
+  const ml=$('modalLayer');
+  if(!modal){ml.hidden=true;ml.innerHTML='';return;}
+  ml.hidden=false;
+  ml.innerHTML=modal==='tutorial'?tutorialHTML():modal==='about'?aboutHTML():confirmHTML();
+  focusPrimary(ml);
+}
+
+function menuHTML(){
+  return '<div class="menu">'
+   +'<div class="ghost-num" aria-hidden="true">49°</div>'
+   +'<div><h1>COUPURE</h1><div class="sub">EVERY CUT HAS A CONSEQUENCE <span class="ar" lang="ar" dir="rtl">كوبور</span></div></div>'
+   +'<div class="pulse-line" aria-hidden="true"></div>'
+   +'<p class="intro"><b>49°C.</b> The city is overheating. Electricity demand is climbing. The grid cannot power everyone.<br><strong>You decide who stays connected.</strong></p>'
+   +'<div class="row"><button class="btn big" data-act="start" data-primary>TAKE CONTROL</button><button class="btn ghost" data-act="tutorial">HOW TO PLAY</button><button class="btn ghost" data-act="about">ABOUT &amp; SOURCES</button></div>'
+   +'<div class="meta"><span>Five days · 60 seconds each</span><span id="bestLine"></span><span>An educational simulation by Chadha Khalouaoui · Climate Leadership Programme</span></div>'
+   +'</div>';
+}
+function tutorialHTML(){
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="How to play">'
+   +'<div><div class="eyebrow">How to play</div><h2>You are the grid operator.</h2></div>'
+   +'<div class="steps">'
+   +'<div class="step">'+ic('bolt')+'<b>Watch the load</b><span>The white marker is demand. The coloured bar is supply. Keep the marker inside the bar.</span></div>'
+   +'<div class="step">'+ic('home')+'<b>Cut to survive</b><span>Click a district to disconnect it before demand passes supply — or the whole grid trips.</span></div>'
+   +'<div class="step w">'+ic('drop')+'<b>Protect water &amp; care</b><span>Pumping stations need power. Cut one for too long and whole neighbourhoods lose water. The hospital must stay on.</span></div>'
+   +'<div class="step g">'+ic('sun')+'<b>Invest at night</b><span>Between days, spend public funds on solar, storage, efficiency and resilient infrastructure.</span></div>'
+   +'<div class="step">'+ic('eye')+'<b>Hold for five days</b><span>Each day is hotter. Keep public trust above zero and deliver as much power and water as you can.</span></div>'
+   +'</div>'
+   +'<p class="dimtxt">Not every cut hurts equally: an hour without power does more harm in a dense, low-income neighbourhood than in a business district — but cutting business costs jobs and budget.</p>'
+   +'<div class="row"><button class="btn" data-act="closeModal" data-primary>'+(S.state==='TUTORIAL'?'GOT IT':'BACK')+'</button>'
+   +(S.state==='TUTORIAL'?'<button class="btn ghost" data-act="start">TAKE CONTROL</button>':'')
+   +'<span class="small">Space pauses · 1–8 switch districts · Esc closes</span></div></div>';
+}
+function aboutHTML(){
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="About the simulation">'
+   +'<div><div class="eyebrow">About the simulation · Sources</div><h2>What is real, and what is a model</h2></div>'
+   +'<p><b>Real context.</b> In late August 2026 Tunisia endured extreme heat: Al Jazeera reported 49.8°C in Kairouan on 27 August, close to the national record of 50.3°C (2021). The utility STEG introduced rotating power cuts as air-conditioning pushed demand to a reported record of about 6,000 MW. On 24 August an electricity interruption stopped the Kerker pumping station and disrupted drinking water in parts of Mahdia and Sfax, according to the water utility SONEDE. Power cuts were one pressure on a water system already strained by long-term scarcity.</p>'
+   +'<p class="small">Source: Al Jazeera, “Tunisia swelters as power cuts disrupt water supplies”, 31 August 2026 — <a href="https://www.aljazeera.com/news/2026/8/31/tunisia-swelters-as-power-cuts-disrupt-water-supplies" target="_blank" rel="noopener">aljazeera.com</a></p>'
+   +'<p><b>Simulated scenario.</b> The city in COUPURE is fictional. District names are borrowed from Greater Tunis for atmosphere, but every number — megawatts, reservoir sizes, costs, emission factors, vulnerability weights, daily temperatures — is a simplified scenario value chosen for play. Nothing here is measured infrastructure data, and the game is not a digital twin of any real grid.</p>'
+   +'<p><b>How the model works.</b> Cooling demand rises 3% per °C above 35°C and peaks from 16:00 to 18:00. Solar output falls from noon and is zero after 19:00. Batteries store energy in MWh and are limited to 10 MW per unit. A pumping station without power drains its reservoir in about three hours. If demand exceeds supply for more than three seconds, the grid trips for one simulated hour. Public trust falls faster where households are more vulnerable to heat.</p>'
+   +'<p><b>Score (100).</b> Electricity actually delivered 25 · Water access 25 · Hospital protection 20 · Public trust and equity 15 · Emissions per MWh delivered 15.</p>'
+   +'<p class="small">Created by Chadha Khalouaoui for the Climate Leadership Programme. Simplified for education; not policy advice.</p>'
+   +'<div class="row"><button class="btn" data-act="closeModal" data-primary>CLOSE</button></div></div>';
+}
+function confirmHTML(){
+  return '<div class="sheet narrow bad" role="dialog" aria-modal="true" aria-label="Restart">'
+   +'<h2>Restart the campaign?</h2><p class="dimtxt">All progress, investments and the current shift will be lost. Your best score is kept.</p>'
+   +'<div class="row"><button class="btn danger" data-act="restartYes">RESTART</button><button class="btn ghost" data-act="closeModal" data-primary>CANCEL</button></div></div>';
+}
+function readyHTML(){
+  const e=DAYINFO[S.day-1],f=Sim.forecast(S);
+  const gap=f.peakGap,bat=Sim.battPower(S);
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="Day briefing">'
+   +'<div><div class="eyebrow">Day '+S.day+' of '+CFG.DAYS+' · briefing</div><h2>'+esc(e.title)+' — forecast high '+CFG.TEMPS[S.day-1]+'°C</h2></div>'
+   +'<p>'+esc(e.brief)+'</p>'
+   +'<div class="cells">'
+   +'<div class="cell"><div class="k">Peak demand</div><div class="v">'+fmt(f.peakDem)+' MW</div><small>if every district stays on</small></div>'
+   +'<div class="cell"><div class="k">Supply at the peak</div><div class="v">'+fmt(f.peakDem-gap)+' MW</div><small>gas'+(S.gasImport?' + emergency gas':'')+' + solar</small></div>'
+   +'<div class="cell"><div class="k">Largest shortfall</div><div class="v '+(gap>0?'neg':'pos')+'">'+(gap>0?fmt(gap)+' MW':'None')+'</div><small>'+(gap>0?'around '+clock(f.peakT):'supply covers demand')+'</small></div>'
+   +'<div class="cell"><div class="k">Battery</div><div class="v">'+(S.battCap?S.battCap+' MWh':'None')+'</div><small>'+(S.battCap?'up to '+bat+' MW, starts half full':'no storage installed')+'</small></div>'
+   +'</div>'
+   +(S.day===1?'<div class="callout">You have 60 seconds of real time for the shift, 12:00 to midnight. Click districts to disconnect or restore them. Watch the reservoirs if you cut a pumping station.</div>':'')
+   +(e.resStart?'<div class="callout water"><b>Water–energy link.</b> A pumping station is a small load, so cutting it is tempting. Today the buffer is thin.</div>':'')
+   +'<div class="row"><button class="btn big" data-act="begin" data-primary>START SHIFT</button><span class="small">Enter to start · Space to pause</span></div></div>';
+}
+function pauseHTML(){
+  return '<div class="sheet narrow" role="dialog" aria-modal="true" aria-label="Paused">'
+   +'<div><div class="eyebrow">Day '+S.day+' · '+clock(S.t)+'</div><h2>Paused</h2></div>'
+   +'<p class="dimtxt">The simulation is frozen. Nothing changes until you resume.</p>'
+   +'<div class="row"><button class="btn" data-act="resume" data-primary>RESUME</button><button class="btn ghost" data-act="tutorial">HOW TO PLAY</button><button class="btn ghost" data-act="about">ABOUT</button><button class="btn danger" data-act="restart">RESTART</button></div></div>';
+}
+function dayDelta(){
+  const A=S.dayStart.tot,B=S.tot;
+  const want=B.want-A.want,served=B.served-A.served,ww=B.waterWant-A.waterWant,wo=B.waterOk-A.waterOk;
+  const d={f:want?served/want:1,w:ww?wo/ww:1,trips:B.trips-A.trips,hosp:B.hospOutH-A.hospOutH,econ:B.econLoss-A.econLoss,
+    em:B.emissions-A.emissions,trust:S.trust-S.dayStart.trust,loss:{}};
+  for(const k in B.loss)d.loss[k]=B.loss[k]-A.loss[k];
+  return d;
+}
+function challengeText(d){
+  const L=d.loss,arr=[['heat','Households without cooling were the main source of anger today.'],['water','Water outages did the most damage today — pumps lost power long enough to empty a reservoir.'],
+    ['hosp','The hospital losing grid power did the most damage today.'],['econ','Shutting down business and industry cost jobs and '+fmt(d.econ,1)+' M TND of budget.'],['trips','Grid failures did the most damage today: demand was left above supply for too long.']];
+  arr.sort((a,b)=>L[b[0]]-L[a[0]]);
+  if(L[arr[0][0]]<0.5)return 'A clean shift: every district kept power and water.';
+  return arr[0][1];
+}
+function reportHTML(){
+  const d=dayDelta();
+  return '<div class="sheet" role="dialog" aria-modal="true" aria-label="End of day report">'
+   +'<div><div class="eyebrow">Day '+S.day+' report · midnight</div><h2>Shift over. The city made it to midnight.</h2></div>'
+   +'<div class="cells">'
+   +'<div class="cell"><div class="k">Electricity delivered</div><div class="v">'+Math.round(d.f*100)+'%</div><small>of what the city needed</small></div>'
+   +'<div class="cell"><div class="k">Water access</div><div class="v">'+Math.round(d.w*100)+'%</div></div>'
+   +'<div class="cell"><div class="k">Grid failures</div><div class="v '+(d.trips?'neg':'')+'">'+d.trips+'</div></div>'
+   +'<div class="cell"><div class="k">Hospital on backup</div><div class="v '+(d.hosp>0.05?'neg':'')+'">'+fmt(d.hosp,1)+' h</div></div>'
+   +'<div class="cell"><div class="k">Trust change</div><div class="v '+(d.trust<-0.5?'neg':'pos')+'">'+(d.trust>=0?'+':'−')+fmt(Math.abs(d.trust))+'</div><small>now '+Math.round(S.trust)+'/100</small></div>'
+   +'<div class="cell"><div class="k">Economic losses</div><div class="v '+(d.econ>0.05?'neg':'')+'">'+fmt(d.econ,1)+' M</div><small>deducted from budget</small></div>'
+   +'</div>'
+   +'<div class="callout"><b>Main challenge.</b> '+esc(challengeText(d))+'</div>'
+   +'<div class="row"><button class="btn big" data-act="shop" data-primary>OPEN INVESTMENT BUDGET</button></div></div>';
+}
+function shopHTML(){
+  const next=S.day+1,e=DAYINFO[next-1],f=(function(){const d=S.day;S.day=next;const r=Sim.forecast(S);S.day=d;return r;})();
+  let cards='';
+  for(const it of SHOP){
+    const cb=Sim.canBuy(S,it.id),n=S.owned[it.id]||0;
+    let tag;
+    if(cb.ok)tag='<span class="tagl av">AVAILABLE'+(n&&!it.daily?' · owned ×'+n:'')+'</span>';
+    else if(cb.owned)tag='<span class="tagl own">✓ '+esc(cb.why.toUpperCase())+(it.rep&&!it.daily&&n?' ×'+n:'')+'</span>';
+    else tag='<span class="tagl no">'+esc(cb.why.toUpperCase())+(n&&!it.daily?' · owned ×'+n:'')+'</span>';
+    cards+='<button class="item'+(n&&(!it.daily||S.gasImport)?' owned':'')+'" data-buy="'+it.id+'" '+(cb.ok?'':'disabled')+'>'
+      +'<span class="t">'+ic(it.icon)+esc(it.t)+'</span><span class="c">'+it.c+' M TND</span>'
+      +'<span class="x">'+esc(it.x)+'</span><span class="tr">'+esc(it.tr)+'</span>'+tag+'</button>';
+  }
+  return '<div class="sheet wide" role="dialog" aria-modal="true" aria-label="Investment shop">'
+   +'<div><div class="eyebrow">Night '+S.day+' · public investment</div><h2>Tomorrow: '+CFG.TEMPS[next-1]+'°C — '+esc(e.title)+'</h2></div>'
+   +'<div class="budgetline"><span><span class="big mono" id="shopBudget">'+Math.floor(S.budget+1e-6)+'</span> M TND available</span>'
+   +'<span class="small">Tomorrow\'s largest shortfall with current assets: <b style="color:'+(f.peakGap>0?'var(--heat)':'var(--ok)')+'">'+(f.peakGap>0?fmt(f.peakGap)+' MW around '+clock(f.peakT):'none')+'</b>. Unspent funds carry over.</span></div>'
+   +'<div class="shop">'+cards+'</div>'
+   +'<div class="row"><button class="btn big" data-act="next" data-primary>CONTINUE TO DAY '+next+'</button></div></div>';
+}
+
+function lessons(sc){
+  const T=S.tot,o=S.owned,L=[];
+  const uns=T.eveUnserved+T.dayUnserved,eveShare=uns>1?T.eveUnserved/uns:0;
+  const dry=T.dryH.medina+T.dryH.menzah+T.dryH.ettad+T.dryH.lac+T.dryH.hosp;
+  if(!S.purchases.length)L.push('You invested nothing. Switching districts off can buy time, but it cannot make a grid resilient: each hotter day left you with harder cuts.');
+  if(o.solar&&!o.bat){
+    if(eveShare>0.5)L.push('You built solar without storage. '+Math.round(eveShare*100)+'% of the energy you could not deliver fell after 18:30, when the sun was fading or gone and air conditioners were still running.');
+    else L.push('You built solar without storage. It lowered gas use at midday, but contributed nothing after sunset.');
+  }
+  if(o.bat)L.push('Storage moved daytime energy into the evening peak'+(o.solar?', complementing your solar capacity':'')+'. Its limit is energy, not power: once empty, it could not help.');
+  if(o.pn||o.ps){
+    if(dry<0.5)L.push('Your solar pumping investment decoupled water from the grid: no neighbourhood lost water, even when power was cut.');
+    else L.push('You protected '+(o.pn&&o.ps?'both pumping stations':'one pumping station')+', but taps still ran dry for '+fmt(dry,1)+' district-hours where pumps stayed dependent on the grid.');
+  }else if(dry>=0.5)L.push('Power cuts became water cuts: taps ran dry for '+fmt(dry,1)+' district-hours because pumping stations lost electricity. Treating water and power as one system is the core adaptation lesson.');
+  else L.push('You kept the pumping stations powered, so water kept flowing — but the system stayed one decision away from a cascading outage.');
+  if(o.eff)L.push('Efficiency standards avoided about '+fmt(T.effSaved)+' MWh of demand — capacity you never had to build, fuel you never had to burn.');
+  if(T.impEm>1)L.push('Emergency gas imports kept the lights on at the cost of '+fmt(T.impEm)+' t of extra CO₂ and '+(o.gas*10)+' M TND that built nothing lasting.');
+  if(o.hosp)L.push('The hospital microgrid kept critical care running regardless of what happened on the grid.');
+  else if(T.hospOutH>0.2)L.push('The hospital spent '+fmt(T.hospOutH,1)+' hours on backup power. Critical sites need their own resilience, not a place in the rotation.');
+  const hi=T.outH.ettad+T.outH.medina,lo=T.outH.menzah;
+  if(hi+lo>1){
+    if(hi>lo*2+1)L.push('Your cuts fell hardest on the most heat-vulnerable homes: Cité Ettadhamen and Medina spent '+fmt(hi,1)+' hours dark, El Menzah '+fmt(lo,1)+'. Equal megawatts are not equal harm.');
+    else L.push('Homes lost power for '+fmt(hi+lo,1)+' district-hours. The same hour of darkness weighs more where households have fewer ways to cope.');
+  }
+  if(T.econLoss>8)L.push('Shutting business and industry protected households but cost '+fmt(T.econLoss)+' M TND — money that could have funded resilience.');
+  if(T.trips)L.push('The grid tripped '+T.trips+' time'+(T.trips>1?'s':'')+'. An uncontrolled blackout hits everyone at once, including the services you were trying to protect.');
+  return L.slice(0,6);
+}
+function resultsHTML(){
+  const sc=finalScore||Sim.score(S),T=S.tot,win=S.state==='VICTORY',P=sc.parts,C=2*Math.PI*52;
+  const cat=(cls,name,pts,max)=>'<div class="cat '+cls+'"><span>'+name+'</span><span class="trk"><i style="width:'+(100*pts/max).toFixed(0)+'%"></i></span><span class="pts">'+fmt(pts,1)+' / '+max+'</span></div>';
+  let cause='';
+  if(!win){
+    const names={heat:'households left without cooling',water:'water outages',hosp:'hospital disruption',econ:'shutdowns of business and industry',trips:'grid failures'};
+    const arr=Object.keys(T.loss).map(k=>[k,T.loss[k]]).sort((a,b)=>b[1]-a[1]).filter(a=>a[1]>1).slice(0,2);
+    cause='<div class="callout bad"><b>What went wrong.</b> Public trust collapsed at '+clock(S.t)+' on day '+S.day+'. Main causes: '+arr.map(a=>names[a[0]]+' (−'+fmt(a[1])+')').join(' and ')+'. Shed load earlier, protect water and the hospital first, and invest so that each day needs fewer cuts.</div>';
+  }
+  const inv=S.purchases.length?Object.keys(S.owned).map(id=>'<span class="chip">'+esc(Sim.SHOPBY[id].t)+(S.owned[id]>1?' ×'+S.owned[id]:'')+'</span>').join(''):'<span class="chip">None</span>';
+  return '<div class="sheet wide '+(win?'good':'bad')+'" role="dialog" aria-modal="true" aria-label="Results">'
+   +'<div><div class="eyebrow">'+(win?'Campaign complete · five days':'Campaign ended · day '+S.day+' of '+CFG.DAYS)+'</div>'
+   +'<h2>'+(win?'The heatwave has passed.':'Trust collapsed. The minister has called.')+'</h2></div>'
+   +'<div class="res-top"><div class="ring"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" cx="60" cy="60" r="52" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'" data-to="'+(C*(1-sc.total/100)).toFixed(1)+'"/></svg><div class="n"><span>'+sc.total+'<small>/ 100</small></span></div></div>'
+   +'<div style="display:grid;gap:10px;min-width:0"><div><h3>Rating</h3><div style="font-family:var(--f-display);font-weight:900;font-size:30px;line-height:1.1;color:'+(sc.total>=75?'var(--ok)':sc.total>=40?'var(--amber)':'var(--heat)')+'">'+sc.rating+'</div>'
+   +'<div class="small">'+(newBest?'New best score. ':'')+(best!==null?'Best completed campaign: '+best+'/100':'Complete all five days to record a best score.')+(win?'':' Unfinished campaigns are scaled by the share of the heatwave survived.')+'</div></div>'
+   +'<div class="cats">'+cat('','Electricity delivered',P.reliability,25)+cat('w','Water security',P.water,25)+cat('h','Hospital protection',P.hospital,20)+cat('t','Public trust &amp; equity',P.social,15)+cat('g','Environmental performance',P.env,15)+'</div></div></div>'
+   +cause
+   +'<div class="cells">'
+   +'<div class="cell"><div class="k">Electricity delivered</div><div class="v">'+Math.round(sc.f*100)+'%</div></div>'
+   +'<div class="cell"><div class="k">Water access</div><div class="v">'+Math.round(sc.w*100)+'%</div></div>'
+   +'<div class="cell"><div class="k">Hospital on backup</div><div class="v">'+fmt(T.hospOutH,1)+' h</div></div>'
+   +'<div class="cell"><div class="k">Grid failures</div><div class="v">'+T.trips+'</div></div>'
+   +'<div class="cell"><div class="k">Emissions</div><div class="v">'+fmt(T.emissions)+' t</div><small>'+fmt(sc.intensity,2)+' t CO₂ per MWh</small></div>'
+   +'<div class="cell"><div class="k">Public trust</div><div class="v">'+Math.round(S.trust)+'</div></div>'
+   +'<div class="cell"><div class="k">Economic losses</div><div class="v">'+fmt(T.econLoss)+' M</div></div>'
+   +'</div>'
+   +'<div style="display:grid;gap:6px"><h3>Investments</h3><div class="chips">'+inv+'</div></div>'
+   +'<div style="display:grid;gap:6px"><h3>What your shift showed</h3><ul class="lessons">'+lessons(sc).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>'
+   +'<div class="row"><button class="btn big" data-act="again" data-primary>PLAY AGAIN</button><button class="btn ghost" data-act="menu">MAIN MENU</button><button class="btn ghost" data-act="about">ABOUT &amp; SOURCES</button></div></div>';
+}
+
+/* ---------- Actions / state machine transitions ---------- */
+function resetGame(toState){
+  S=Sim.newGame();S.state=toState;acc=0;finalScore=null;newBest=false;modal=null;lastTrustShown=-1;lastTrustWarn=100;alertUntil=0;
+  for(const k in logSeen)delete logSeen[k];
+  $('log').textContent='';for(const id in tiles){tiles[id].wState='';tiles[id].anim='';}
+  const a=$('alert');a._m='';a.textContent='Control room standing by.';a.className='alert';
+  $('inspect').textContent='Click a district (or press 1–8) to cut or restore its power.';
+  Sound.hum(false);drawChart();showScreen();
+}
+function act(a){
+  const st=S.state;
+  switch(a){
+    case 'start':if(st==='MENU'||st==='TUTORIAL'){Sound.click();resetGame('READY');}break;
+    case 'tutorial':if(st==='MENU')S.state='TUTORIAL';modal='tutorial';showScreen();break;
+    case 'about':modal='about';if(st==='PLAYING')pause();else showModal();break;
+    case 'closeModal':closeModal();break;
+    case 'begin':if(st==='READY'&&Sim.beginDay(S,onEvent)){acc=0;lastTs=0;drawChart();Sound.hum(true);alertUntil=0;showScreen();}break;
+    case 'pause':pause();break;
+    case 'resume':if(st==='PAUSED'){S.state='PLAYING';acc=0;lastTs=0;Sound.hum(true);showScreen();}break;
+    case 'shop':if(Sim.openShop(S))showScreen();break;
+    case 'next':if(Sim.nextDay(S)){drawChart();showScreen();}break;
+    case 'restart':if(st!=='MENU'&&st!=='TUTORIAL'){if(st==='PLAYING')pause();modal='confirm';showModal();}break;
+    case 'restartYes':case 'again':resetGame('READY');break;
+    case 'menu':resetGame('MENU');break;
+    case 'sound':{const m=Sound.toggleMute();renderSoundBtn();if(!m){Sound.click();if(S.state==='PLAYING')Sound.hum(true);}break;}
+  }
+}
+function pause(){if(S.state==='PLAYING'){S.state='PAUSED';Sound.hum(false);showScreen();}}
+function closeModal(){
+  if(!modal)return;
+  modal=null;if(S.state==='TUTORIAL')S.state='MENU';
+  showScreen();
+}
+function renderSoundBtn(){const b=$('bSound');b.innerHTML=ic(Sound.muted?'mute':'sound');b.setAttribute('aria-pressed',String(!Sound.muted));b.title=Sound.muted?'Sound off':'Sound on';}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act],[data-buy]');if(!b||b.disabled)return;
+  if(b.dataset.buy){
+    if(Sim.buy(S,b.dataset.buy,onEvent)){
+      const id=b.dataset.buy;$('sheetLayer').innerHTML=shopHTML();render();
+      const nb=$('sheetLayer').querySelector('[data-buy="'+id+'"]');
+      if(nb){nb.classList.add('bought');if(!nb.disabled)nb.focus();else focusPrimary($('sheetLayer'));}
+    }else Sound.deny();
+    return;
+  }
+  act(b.dataset.act);
+});
+$('bPause').addEventListener('click',()=>act(S.state==='PAUSED'?'resume':'pause'));
+$('bSound').addEventListener('click',()=>act('sound'));
+$('bRestart').addEventListener('click',()=>act('restart'));
+$('bAbout').addEventListener('click',()=>act('about'));
+$('bAbout2').addEventListener('click',()=>act('about'));
+
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  const tag=(e.target.tagName||'').toLowerCase(),onCtl=tag==='button'||tag==='a'||tag==='input';
+  if(e.key==='Escape'){
+    if(modal){e.preventDefault();closeModal();}
+    else if(S.state==='PLAYING'){e.preventDefault();pause();}
+    else if(S.state==='PAUSED'){e.preventDefault();act('resume');}
+    return;
+  }
+  if(e.key===' '||e.code==='Space'){
+    // Space on a focused tile or button keeps its native meaning, except during play where it always pauses
+    if(modal)return;
+    if(S.state==='PLAYING'&&(!onCtl||e.target.classList.contains('tile'))){e.preventDefault();pause();}
+    else if(S.state==='PAUSED'&&!onCtl){e.preventDefault();act('resume');}
+    return;
+  }
+  if(e.key==='Enter'&&!onCtl){
+    const root=modal?$('modalLayer'):!$('menu').hidden?$('menu'):$('sheetLayer');
+    const p=root&&!root.hidden&&root.querySelector('[data-primary]');
+    if(p){e.preventDefault();p.click();}
+    return;
+  }
+  if(S.state==='PLAYING'&&!modal&&e.key>='1'&&e.key<='8'){e.preventDefault();onToggle(DISTRICTS[+e.key-1].id);}
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&S.state==='PLAYING')pause();});
+
+/* ---------- Main loop: fixed simulation steps driven by real time ---------- */
+function advance(steps){
+  for(let i=0;i<steps&&S.state==='PLAYING';i++)Sim.step(S,CFG.STEP_H,onEvent);
+  trustWatch();updateChart();idleAlert();render();
+}
+function frame(ts){
+  requestAnimationFrame(frame);
+  if(S.state!=='PLAYING'||modal){lastTs=0;return;}
+  if(!lastTs){lastTs=ts;return;}
+  acc+=Math.min(250,ts-lastTs)*speed;lastTs=ts;      // clamp so a stalled tab cannot fast-forward the shift
+  const n=Math.floor(acc/STEP_MS);
+  if(n>0){acc-=n*STEP_MS;advance(n);}
+}
+
+/* ---------- Boot ---------- */
+buildBoard();
+$('bRestart').innerHTML=ic('restart');$('bAbout').innerHTML=ic('info');renderSoundBtn();
+drawChart();showScreen();
+requestAnimationFrame(frame);
+
+// Development-only hooks (open the page with ?dev=1). Not exposed in the player-facing interface.
+if(/[?&]dev=1/.test(location.search)){
+  window.__COUPURE={Sim,get S(){return S;},act,advance,onToggle,setSpeed(v){speed=v;},render,showScreen};
+}
+})();
+</script>
+</body>
+</html>
